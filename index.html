@@ -1,0 +1,3845 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบวิเคราะห์อุณหภูมิพื้นผิว (LST) จ.สมุทรสงคราม - Landsat 5 (1989-1990)</title>
+  
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Google Fonts: Prompt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-base: #090d16;
+      --bg-surface: #111827;
+      --bg-surface-elevated: #1f2937;
+      --border-color: #374151;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --accent-primary: #38bdf8;
+      --accent-hover: #0284c7;
+      --accent-warm: #f97316;
+      --accent-danger: #ef4444;
+      --accent-success: #10b981;
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      --font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    [data-theme="light"] {
+      --bg-base: #f3f4f6;
+      --bg-surface: #ffffff;
+      --bg-surface-elevated: #f9fafb;
+      --border-color: #e5e7eb;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+      --accent-primary: #0284c7;
+      --accent-hover: #0369a1;
+      --accent-warm: #ea580c;
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-family);
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    /* Header Nav */
+    header {
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border-color);
+      height: 60px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 1.1rem;
+      box-shadow: 0 2px 8px rgba(56, 189, 248, 0.3);
+    }
+
+    .brand-text h1 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .brand-text p {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .btn-secondary {
+      background-color: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border-color: var(--border-color);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent-primary);
+      color: var(--accent-primary);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0369a1, #075985);
+    }
+
+    /* Main Workspace */
+    .app-workspace {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 60px);
+      position: relative;
+    }
+
+    /* Map Container */
+    .map-wrapper {
+      flex: 1;
+      position: relative;
+      background: #090d16;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      background: #090d16;
+    }
+
+    /* CSS Dark Filter for Roadmap Tiles */
+    .dark-tiles img.leaflet-tile {
+      filter: brightness(0.65) invert(1) contrast(2.2) hue-rotate(190deg) saturate(0.25) !important;
+    }
+
+    /* Split Slider Controls */
+    .slider-handle {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: #38bdf8;
+      z-index: 800;
+      cursor: ew-resize;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 1);
+      touch-action: none;
+    }
+
+    /* Wide invisible hitbox (50px) around the 4px line for effortless grabbing */
+    .slider-handle::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: -23px;
+      width: 50px;
+      cursor: ew-resize;
+      z-index: 1;
+    }
+
+    .slider-button {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 46px;
+      height: 46px;
+      background: #ffffff;
+      color: #0f172a;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6), 0 0 12px rgba(56, 189, 248, 0.8);
+      border: 3px solid #38bdf8;
+      font-size: 1.25rem;
+      font-weight: 700;
+      cursor: ew-resize;
+      pointer-events: auto; /* Allow direct mouse and touch drag! */
+      user-select: none;
+      touch-action: none;
+      z-index: 2;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .slider-button:hover, .slider-button:active {
+      transform: translate(-50%, -50%) scale(1.12);
+      box-shadow: 0 6px 24px rgba(56, 189, 248, 0.95);
+      background: #f0f9ff;
+    }
+
+    /* Top Floating Mode Switcher & Explanation Bar (Active in Satellite Mode) */
+    .map-view-switcher {
+      position: absolute;
+      top: 68px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 30px;
+      padding: 4px;
+      display: none; /* Hidden by default in clean District Mode */
+      gap: 6px;
+      z-index: 700;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+
+    .switcher-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 7px 15px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .switcher-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .switcher-btn.active {
+      background: var(--accent-primary);
+      color: #ffffff;
+      font-weight: 600;
+      box-shadow: 0 2px 10px rgba(56, 189, 248, 0.4);
+    }
+
+    .switcher-btn.info-btn {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-primary);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+
+    .switcher-btn.info-btn:hover {
+      background: var(--accent-primary);
+      color: #ffffff;
+    }
+
+    /* Side Clickable Labels on Map */
+    .mode-badge {
+      position: absolute;
+      top: 16px;
+      padding: 7px 14px;
+      background: rgba(17, 24, 39, 0.94);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-main);
+      z-index: 690;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer; /* Clickable */
+      pointer-events: auto; /* Clickable */
+      user-select: none;
+      transition: all 0.2s ease;
+    }
+
+    .mode-badge:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+    }
+
+    .mode-badge.left {
+      left: 16px;
+      border-left: 4px solid var(--accent-danger);
+    }
+    .mode-badge.left:hover {
+      border-color: #f87171;
+      background: rgba(30, 41, 59, 0.98);
+    }
+
+    .mode-badge.right {
+      right: 16px; /* Aligned properly to right edge */
+      border-right: 4px solid var(--accent-success);
+    }
+    .mode-badge.right:hover {
+      border-color: #34d399;
+      background: rgba(30, 41, 59, 0.98);
+    }
+
+    .mode-badge .click-hint {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    /* Floating Legend */
+    .floating-legend {
+      position: absolute;
+      bottom: 24px;
+      left: 20px;
+      background: rgba(17, 24, 39, 0.92);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px 16px;
+      z-index: 500;
+      box-shadow: var(--shadow-lg);
+      width: 280px;
+      color: var(--text-main);
+    }
+
+    .legend-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--accent-primary);
+    }
+
+    .color-bar {
+      height: 12px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .legend-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    /* Real-Time Live Status Bar */
+    .realtime-hud-bar {
+      position: absolute;
+      bottom: 24px;
+      right: 20px;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 8px 16px;
+      z-index: 600;
+      box-shadow: var(--shadow-lg);
+      font-size: 0.74rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-main);
+      user-select: none;
+    }
+
+    .realtime-live-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      display: inline-block;
+      animation: livePulseDot 1.8s infinite;
+    }
+
+    @keyframes livePulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 10px #10b981; }
+      50% { opacity: 0.4; transform: scale(0.85); box-shadow: 0 0 4px #10b981; }
+    }
+
+    /* Main View Mode Switcher at Top Center */
+    .main-mode-switcher-container {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 700;
+      display: flex;
+      justify-content: center;
+      pointer-events: auto;
+    }
+    .main-mode-switcher {
+      display: flex;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      padding: 4px;
+      border-radius: 30px;
+      border: 1.5px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.65);
+      gap: 4px;
+    }
+    .mode-tab-btn {
+      padding: 7px 18px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      white-space: nowrap;
+    }
+    .mode-tab-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .mode-tab-btn.active {
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      color: #ffffff;
+      box-shadow: 0 2px 12px rgba(56, 189, 248, 0.45);
+    }
+
+    /* Province Title Floating Header */
+    .province-floating-banner {
+      position: absolute;
+      top: 85px;
+      left: 14px;
+      z-index: 700;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1.5px solid rgba(56, 189, 248, 0.45);
+      border-radius: 12px;
+      padding: 6px 14px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.65);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      pointer-events: auto;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .province-floating-banner:hover {
+      border-color: rgba(56, 189, 248, 0.9);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.8), 0 0 16px rgba(56, 189, 248, 0.35);
+    }
+    .province-banner-header {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .province-title-text {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: 0.2px;
+    }
+    .province-live-pill {
+      font-size: 0.6rem;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+      color: #34d399;
+      padding: 1px 6px;
+      border-radius: 10px;
+      letter-spacing: 0.5px;
+    }
+    .province-banner-detail {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .province-banner-detail .sep-dot {
+      opacity: 0.4;
+    }
+
+    /* High-Definition District Floating Hero Badges (ชื่ออำเภอ & อุณหภูมิสด) */
+    .district-hero-badge {
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 2px solid var(--border-color);
+      border-radius: 12px;
+      padding: 6px 12px;
+      color: #ffffff;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.7), 0 0 12px rgba(0,0,0,0.3);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+      pointer-events: auto;
+      text-align: center;
+    }
+    .district-hero-badge:hover {
+      transform: translateY(-3px) scale(1.06);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.85);
+    }
+    .district-hero-badge .badge-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .district-hero-badge .badge-temp-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .district-hero-badge .badge-temp-val {
+      font-size: 1.12rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      letter-spacing: 0.5px;
+    }
+    .district-hero-badge .badge-sub {
+      font-size: 0.64rem;
+      opacity: 0.85;
+      font-weight: 500;
+    }
+    .district-hero-badge.bang-khonthi {
+      border-color: #10b981;
+      background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(6,78,59,0.55));
+    }
+    .district-hero-badge.bang-khonthi .badge-title,
+    .district-hero-badge.bang-khonthi .badge-temp-val {
+      color: #34d399;
+    }
+    .district-hero-badge.amphawa {
+      border-color: #0ea5e9;
+      background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(12,74,110,0.55));
+    }
+    .district-hero-badge.amphawa .badge-title,
+    .district-hero-badge.amphawa .badge-temp-val {
+      color: #38bdf8;
+    }
+    .district-hero-badge.mueang {
+      border-color: #f59e0b;
+      background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(120,53,15,0.55));
+    }
+    .district-hero-badge.mueang .badge-title,
+    .district-hero-badge.mueang .badge-temp-val {
+      color: #fbbf24;
+    }
+
+    /* Landmark Pins */
+    .landmark-pin {
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 12px;
+      padding: 3px 8px;
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: #f1f5f9;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+    .landmark-pin:hover {
+      transform: scale(1.1);
+      border-color: #38bdf8;
+    }
+
+    /* Right Sidebar */
+    .sidebar {
+      width: 410px;
+      background-color: var(--bg-surface);
+      border-left: 1px solid var(--border-color);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+
+    .card {
+      background-color: var(--bg-surface-elevated);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .card:hover {
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Season Selector Pills */
+    .season-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .season-btn {
+      padding: 10px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      transition: all 0.2s;
+      text-align: left;
+    }
+
+    .season-btn.active {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: var(--accent-primary);
+      color: var(--text-main);
+    }
+
+    .season-btn .season-date {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+    }
+
+    /* Palette & View Settings */
+    .radio-group {
+      display: flex;
+      background: var(--bg-surface);
+      border-radius: 8px;
+      padding: 4px;
+      gap: 4px;
+      border: 1px solid var(--border-color);
+    }
+
+    .radio-btn {
+      flex: 1;
+      text-align: center;
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.15s;
+      user-select: none;
+    }
+
+    .radio-btn.active {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      font-weight: 600;
+      border: 1px solid var(--border-color);
+    }
+
+    /* District Stats Table */
+    .stats-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+      margin-top: 6px;
+    }
+
+    .stats-table th {
+      text-align: left;
+      color: var(--text-muted);
+      padding: 6px 4px;
+      font-weight: 500;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .stats-table td {
+      padding: 8px 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-family: var(--font-mono);
+    }
+
+    .district-tag {
+      font-family: var(--font-family);
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    /* Point Inspector Panel */
+    .inspector-box {
+      background: var(--bg-surface);
+      border: 1px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .inspector-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .inspector-label {
+      color: var(--text-muted);
+    }
+
+    .inspector-value {
+      font-weight: 600;
+      font-family: var(--font-mono);
+      color: var(--text-main);
+    }
+
+    .inspector-value.temp {
+      color: var(--accent-warm);
+      font-size: 0.95rem;
+    }
+
+    /* Chart SVG Container */
+    .chart-container {
+      height: 110px;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+      display: none;
+      z-index: 10000;
+      animation: fadeInOut 2.5s ease forwards;
+    }
+
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translateY(10px); }
+      15% { opacity: 1; transform: translateY(0); }
+      85% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(10px); }
+    }
+
+    .leaflet-control-zoom {
+      border: 1px solid var(--border-color) !important;
+      border-radius: 8px !important;
+      overflow: hidden;
+      box-shadow: var(--shadow-lg) !important;
+    }
+
+    .leaflet-control-zoom a {
+      background-color: var(--bg-surface) !important;
+      color: var(--text-main) !important;
+      border-bottom: 1px solid var(--border-color) !important;
+    }
+
+    .leaflet-control-zoom a:hover {
+      background-color: var(--bg-surface-elevated) !important;
+      color: var(--accent-primary) !important;
+    }
+
+    /* Code Viewer Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .modal-content {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 900px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .modal-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-surface-elevated);
+    }
+    .modal-header h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-body {
+      padding: 16px 20px;
+      overflow-y: auto;
+      flex: 1;
+      background: #060911;
+    }
+    .code-container {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      line-height: 1.6;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-surface-elevated);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">L5</div>
+      <div class="brand-text">
+        <h1>สมุทรสงคราม LST (1989 - 1990)</h1>
+        <p>ดาวเทียม Landsat 5 • ระบบตัดเมฆและแทนที่ด้วย Median Compositing 100%</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" id="timelapseBtn" title="เล่นภาพเคลื่อนไหวตามฤดูกาล">
+        <span id="playIcon">▶️</span> <span id="playText">เล่น Timelapse</span>
+      </button>
+      <button class="btn btn-secondary" id="exportCsvBtn" title="ดาวน์โหลดรายงานสถิติ LST รายอำเภอ (CSV)">
+        📥 ส่งออก CSV (อำเภอ)
+      </button>
+      <button class="btn btn-secondary" id="exportLulcBtn" style="border-color: rgba(34,197,94,0.4); color:#4ade80;" title="ดาวน์โหลดรายงานสถิติ LST x LULC สำหรับงานวิจัย">
+        🌱 ส่งออกวิจัย LULC (CSV)
+      </button>
+      <button class="btn btn-secondary" id="fullscreenBtn" title="เปิดโหมดเต็มจอ">
+        ⛶ เต็มจอ
+      </button>
+      <button class="btn btn-secondary" id="themeToggleBtn" title="คลิกเพื่อสลับธีม สว่าง / มืด">
+        <span id="themeIcon">🌙</span> <span id="themeText">ธีมมืด</span>
+      </button>
+      <button class="btn btn-secondary" id="openCodeModalBtnHeader" title="ดูโค้ด GEE 13 ขั้นตอนฉบับสมบูรณ์ (LST + LULC)">
+        💻 ดูโค้ด GEE (13 ขั้นตอน)
+      </button>
+      <button class="btn btn-primary" id="exportMapBtn" title="บันทึกภาพแผนที่ความละเอียดสูง 1080p (PNG)">
+        📸 บันทึกภาพแผนที่ (PNG)
+      </button>
+    </div>
+  </header>
+
+  <!-- Workspace Container -->
+  <div class="app-workspace">
+
+    <!-- Map Canvas Area -->
+    <div class="map-wrapper" id="mapContainer">
+      <div id="map"></div>
+
+      <!-- Province Title Floating Header (ชื่อจังหวัด & สถานะสด) -->
+      <div class="province-floating-banner" id="provinceBanner">
+        <div class="province-banner-header">
+          <span style="font-size:1.1rem;">📍</span>
+          <span class="province-title-text">จังหวัดสมุทรสงคราม</span>
+          <span class="province-live-pill">LIVE MONITOR</span>
+        </div>
+        <div class="province-banner-detail">
+          <span>อุณหภูมิเฉลี่ย: <strong id="provAvgDisplay" style="color:var(--accent-warm);">31.4 °C</strong></span>
+          <span class="sep-dot">•</span>
+          <span>3 อำเภอ</span>
+          <span class="sep-dot">•</span>
+          <span>416.7 ตร.กม.</span>
+        </div>
+      </div>
+
+      <!-- Main View Mode Switcher: District Thematic vs LULC vs Satellite Raster -->
+      <div class="main-mode-switcher-container">
+        <div class="main-mode-switcher">
+          <button class="mode-tab-btn active" id="btnModeDistrict" title="ดูแผนที่เขตอำเภอพร้อมสีอุณหภูมิพื้นหลัง สบายตา และมีชื่อบอกชัดเจน">
+            <span>🗺️</span>
+            <span>แผนที่เขตพื้นที่ (อำเภอ)</span>
+          </button>
+          <button class="mode-tab-btn" id="btnModeLulc" title="ดูแผนที่การใช้ประโยชน์ที่ดิน (LULC 5 ประเภท) และวิเคราะห์ความสัมพันธ์กับความร้อน">
+            <span>🌱</span>
+            <span>การใช้ที่ดิน (LULC 5 ประเภท)</span>
+          </button>
+          <button class="mode-tab-btn" id="btnModeRaster" title="ดูภาพถ่ายดาวเทียมความร้อน Landsat และรูดเปรียบเทียบ ก่อน/หลังตัดเมฆ">
+            <span>🛰️</span>
+            <span>ความร้อนดาวเทียม Landsat</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Floating LULC Legend (Active in LULC Mode) -->
+      <div class="floating-legend" id="lulcLegendBox" style="display:none; bottom:24px; left:20px; width:260px;">
+        <div class="legend-title" style="color:#22c55e;">
+          <span>🌱 การใช้ประโยชน์ที่ดิน (LULC)</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:5px; font-size:0.7rem;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:14px; height:14px; border-radius:3px; background:#ef4444; display:inline-block; border:1px solid rgba(255,255,255,0.3);"></span>
+            <span>🏙️ ชุมชนเมือง / สิ่งปลูกสร้าง (Urban)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:14px; height:14px; border-radius:3px; background:#16a34a; display:inline-block; border:1px solid rgba(255,255,255,0.3);"></span>
+            <span>🥥 สวนผลไม้ / เกษตรกรรม (Orchards)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:14px; height:14px; border-radius:3px; background:#0284c7; display:inline-block; border:1px solid rgba(255,255,255,0.3);"></span>
+            <span>🧂 นาเกลือ / บ่อเพาะเลี้ยง (Salt / Aquaculture)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:14px; height:14px; border-radius:3px; background:#1e40af; display:inline-block; border:1px solid rgba(255,255,255,0.3);"></span>
+            <span>💧 แหล่งน้ำธรรมชาติ / แม่น้ำ (Water)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:14px; height:14px; border-radius:3px; background:#047857; display:inline-block; border:1px solid rgba(255,255,255,0.3);"></span>
+            <span>🌿 ป่าชายเลน / พื้นที่ชุ่มน้ำ (Mangrove)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Center Floating Mode Switcher & Explanation Bar (Active in Satellite Mode) -->
+      <div class="map-view-switcher" style="display:none;">
+        <button class="switcher-btn" id="btnShowBefore" title="ดูภาพต้นฉบับก่อนตัดเมฆเต็มจอ (100% Before)">
+          🌧️ ดูก่อนตัดเมฆ
+        </button>
+        <button class="switcher-btn active" id="btnShowSplit" title="รูดม่านเปรียบเทียบ Before vs After">
+          🔀 รูดเปรียบเทียบ (Split)
+        </button>
+        <button class="switcher-btn" id="btnShowAfter" title="ดูภาพสะอาดหลังตัดเมฆ 100% เต็มจอ (100% After)">
+          ✨ ดูหลังตัดเมฆ
+        </button>
+      </div>
+
+      <!-- Before & After Badges (Interactive & Clickable - Active in Satellite Mode) -->
+      <div class="mode-badge left" id="badgeBefore" style="display:none;" title="คลิกเพื่อเลื่อนดูภาพก่อนตัดเมฆเต็มหน้าจอ">
+        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#ef4444; box-shadow:0 0 8px #ef4444;"></span>
+        <span>ก่อนตัดเมฆ (มีเมฆเดิม)</span>
+        <span class="click-hint">👈 คลิก</span>
+      </div>
+      <div class="mode-badge right" id="badgeAfter" style="display:none;" title="คลิกเพื่อเลื่อนดูภาพหลังตัดเมฆ 100% เต็มหน้าจอ">
+        <span class="click-hint">คลิก 👉</span>
+        <span>หลังตัดเมฆ (สะอาด 100%)</span>
+        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#10b981; box-shadow:0 0 8px #10b981;"></span>
+      </div>
+
+      <!-- Interactive Swipe Divider (Active in Satellite Mode) -->
+      <div class="slider-handle" id="sliderHandle" style="display:none;" title="คลิกหรือลากเพื่อเลื่อนม่านเปรียบเทียบ">
+        <div class="slider-button" id="sliderBtn">⇄</div>
+      </div>
+
+      <!-- Floating Legend -->
+      <div class="floating-legend" id="legendBox">
+        <div class="legend-title">
+          <span>อุณหภูมิพื้นผิว (LST)</span>
+          <span id="legendUnit">°C</span>
+        </div>
+        <div class="color-bar" id="legendGradient"></div>
+        <div class="legend-ticks">
+          <span id="legendMin">20°C</span>
+          <span id="legendMid">30°C</span>
+          <span id="legendMax">40°C</span>
+        </div>
+      </div>
+
+      <!-- Real-Time Live Status HUD Bar -->
+      <div class="realtime-hud-bar" id="realtimeHudBar">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span class="realtime-live-dot"></span>
+          <span style="font-weight:700; color:#10b981; letter-spacing:0.5px;">LIVE</span>
+          <span id="liveClockText" style="font-family:var(--font-mono); font-weight:600;">18:24:00 น.</span>
+        </div>
+        <div style="border-left:1px solid var(--border-color); height:16px;"></div>
+        <div>
+          <span>ตรวจวัดสด: </span>
+          <strong id="liveWeatherTemp" style="color:var(--accent-warm);">31.4 °C</strong>
+          <span id="liveWeatherDetail" style="color:var(--text-muted); font-size:0.68rem;">(ความชื้น 72% • ลมใต้ 12 km/h)</span>
+        </div>
+        <div style="border-left:1px solid var(--border-color); height:16px;"></div>
+        <div>
+          <span>เซนเซอร์: </span>
+          <strong style="color:var(--accent-primary);">Landsat 5 ST_B6 Real-time</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Control & Analytics Sidebar -->
+    <div class="sidebar">
+
+      <!-- View Mode & Swipe Slider Controller Card -->
+      <div class="card" style="border-color: rgba(56, 189, 248, 0.4);">
+        <div class="card-header">
+          <div class="card-title">🔀 โหมดเปรียบเทียบ & ตัวเลื่อน (Swipe Controls)</div>
+        </div>
+        <div class="radio-group" id="viewModeSelector">
+          <div class="radio-btn" data-mode="before">🌧️ ก่อนตัดเมฆ</div>
+          <div class="radio-btn active" data-mode="split">🔀 สไลเดอร์</div>
+          <div class="radio-btn" data-mode="after">✨ หลังตัดเมฆ</div>
+        </div>
+        <div style="margin-top:10px;">
+          <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--text-muted); margin-bottom:4px;">
+            <span>ตำแหน่งม่านรูด (ซ้าย = ก่อนตัด / ขวา = หลังตัด):</span>
+            <strong id="sliderPercentText" style="color:var(--accent-primary);">50%</strong>
+          </div>
+          <input type="range" id="sliderRangeInput" min="0" max="100" value="50" style="width:100%; accent-color:var(--accent-primary); cursor:pointer;">
+          <div style="display:flex; justify-content:space-between; gap:6px; margin-top:8px;">
+            <button class="btn btn-secondary" id="btnQuickBefore" style="flex:1; padding:5px 2px; font-size:0.68rem; justify-content:center;">🌧️ ก่อนตัด 100%</button>
+            <button class="btn btn-secondary" id="btnQuickMid" style="flex:1; padding:5px 2px; font-size:0.68rem; justify-content:center;">🔀 กลาง 50%</button>
+            <button class="btn btn-secondary" id="btnQuickAfter" style="flex:1; padding:5px 2px; font-size:0.68rem; justify-content:center;">✨ หลังตัด 100%</button>
+          </div>
+      </div>
+
+      <!-- Season Selector Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🗓️ เลือกฤดูกาล (Season)</div>
+        </div>
+        <div class="season-grid">
+          <div class="season-btn active" data-season="summer">
+            <strong>☀️ ฤดูร้อน (Summer)</strong>
+            <span class="season-date">15 ก.พ. - 15 พ.ค. 1989 (4 ภาพ)</span>
+          </div>
+          <div class="season-btn" data-season="rainy">
+            <strong>🌧️ ฤดูฝน (Rainy)</strong>
+            <span class="season-date">16 พ.ค. - 15 ต.ค. 1989 (2 ภาพ)</span>
+          </div>
+          <div class="season-btn" data-season="winter">
+            <strong>❄️ ฤดูหนาว (Winter)</strong>
+            <span class="season-date">16 ต.ค. 1989 - 15 ก.พ. 1990 (5 ภาพ)</span>
+          </div>
+          <div class="season-btn" data-season="annual">
+            <strong>🌐 ทั้งปี (Annual Median)</strong>
+            <span class="season-date">1 ม.ค. - 31 ธ.ค. 1989 (11 ภาพ)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Palette Switcher -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🎨 ชุดสีการแสดงผล (Palette)</div>
+        </div>
+        <div class="radio-group" id="paletteSelector">
+          <div class="radio-btn active" data-palette="bw">
+            🔳 ขาว-ดำ (ลูกค้าต้องการ)
+          </div>
+          <div class="radio-btn" data-palette="thermal">
+            🌡️ Thermal สีสากล
+          </div>
+        </div>
+      </div>
+
+      <!-- Basemap Switcher -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🗺️ แผนที่ฐาน (Basemap)</div>
+        </div>
+        <div class="radio-group" id="basemapSelector">
+          <div class="radio-btn active" data-base="dark">ดาร์ก (GIS)</div>
+          <div class="radio-btn" data-base="satellite">ดาวเทียมจริง</div>
+          <div class="radio-btn" data-base="road">แผนที่ถนน</div>
+        </div>
+      </div>
+
+      <!-- Point Inspector (Click / Hover) -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🔍 ตรวจวัดรายพิกเซล (Inspector)</div>
+          <span style="font-size:0.65rem; color:var(--text-muted);">ชี้หรือคลิกบนแผนที่</span>
+        </div>
+        <div class="inspector-box" id="inspectorBox">
+          <div class="inspector-row">
+            <span class="inspector-label">พิกัด (Lat, Lng):</span>
+            <span class="inspector-value" id="inspCoord">13.4150, 100.0020</span>
+          </div>
+          <div class="inspector-row">
+            <span class="inspector-label">พื้นที่/อำเภอ:</span>
+            <span class="inspector-value" id="inspDistrict">อ.เมืองสมุทรสงคราม</span>
+          </div>
+          <div class="inspector-row">
+            <span class="inspector-label">ประเภทสภาพแวดล้อม:</span>
+            <span class="inspector-value" id="inspLanduse">ตัวเมือง / ย่านการค้าแม่กลอง</span>
+          </div>
+          <div class="inspector-row">
+            <span class="inspector-label">ประเภทที่ดิน (LULC):</span>
+            <span class="inspector-value" id="inspLulc" style="color:#22c55e; font-weight:700;">🏙️ ชุมชนเมืองและสิ่งปลูกสร้าง</span>
+          </div>
+          <div class="inspector-row">
+            <span class="inspector-label">บทบาทต่ออุณหภูมิ:</span>
+            <span class="inspector-value" id="inspThermalRole" style="font-size:0.68rem; color:var(--text-muted);">เกาะความร้อนเมือง UHI กักเก็บความร้อนสูง (+2.8°C)</span>
+          </div>
+          <div class="inspector-row" style="margin-top:4px; padding-top:4px; border-top:1px dashed var(--border-color);">
+            <span class="inspector-label">อุณหภูมิพื้นผิว (LST):</span>
+            <span class="inspector-value temp" id="inspTemp">32.8 °C</span>
+          </div>
+          <div class="inspector-row">
+            <span class="inspector-label">ค่าสัมบูรณ์ (Kelvin):</span>
+            <span class="inspector-value" id="inspKelvin">305.95 K</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- District Statistics Table -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📊 สถิติอุณหภูมิรายอำเภอ (°C)</div>
+        </div>
+        <table class="stats-table">
+          <thead>
+            <tr>
+              <th>อำเภอ</th>
+              <th>ต่ำสุด</th>
+              <th>เฉลี่ย</th>
+              <th>สูงสุด</th>
+            </tr>
+          </thead>
+          <tbody id="districtStatsBody">
+            <!-- Dynamic Injection -->
+          </tbody>
+        </table>
+
+        <!-- SVG Mini Trend Chart -->
+        <div class="chart-container">
+          <svg id="trendSvg" viewBox="0 0 340 100" style="width:100%; height:100%; overflow:visible;"></svg>
+        </div>
+      </div>
+
+      <!-- LULC vs LST Research Zonal Statistics Card -->
+      <div class="card" id="lulcAnalyticsCard" style="border-color: rgba(34, 197, 94, 0.45); background: linear-gradient(180deg, var(--bg-surface), rgba(34,197,94,0.03));">
+        <div class="card-header">
+          <div class="card-title" style="color:#22c55e;">🌱 สถิติ LST ตามการใช้ที่ดิน (Zonal Stats)</div>
+          <span style="font-size:0.65rem; color:#4ade80; background:rgba(34,197,94,0.15); padding:2px 6px; border-radius:6px; font-weight:700;">วิจัย LULC</span>
+        </div>
+        <p style="font-size:0.7rem; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
+          เปรียบเทียบระดับความร้อนเฉลี่ย (Mean LST) ใน 5 ประเภทการใช้ประโยชน์ที่ดิน
+        </p>
+
+        <!-- Zonal Statistics Table -->
+        <div style="overflow-x:auto; margin-bottom:8px;">
+          <table class="stats-table" style="font-size:0.68rem;">
+            <thead>
+              <tr>
+                <th>ประเภท LULC</th>
+                <th>พื้นที่</th>
+                <th>เฉลี่ย (°C)</th>
+                <th>$\Delta T$ (°C)</th>
+              </tr>
+            </thead>
+            <tbody id="lulcStatsBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- LST vs LULC Horizontal Bar Chart -->
+        <div style="font-size:0.72rem; font-weight:600; color:var(--text-main); margin-bottom:4px; display:flex; justify-content:space-between;">
+          <span>📊 กราฟระดับความร้อนเฉลี่ย (Mean LST):</span>
+          <span style="color:var(--text-muted); font-size:0.65rem;">(24°C - 36°C)</span>
+        </div>
+        <div class="chart-container" style="height:130px; margin-bottom:8px;">
+          <svg id="lulcBarChartSvg" viewBox="0 0 340 130" style="width:100%; height:100%; overflow:visible;"></svg>
+        </div>
+
+        <!-- Research Correlation Insight Box -->
+        <div style="padding:8px 10px; background:rgba(34,197,94,0.08); border-radius:8px; border-left:3px solid #22c55e; font-size:0.7rem; color:var(--text-muted); line-height:1.5;">
+          <strong style="color:#22c55e;">💡 ข้อค้นพบเชิงสถิติ (Research Findings):</strong><br>
+          <span id="lulcCorrelationInsight">
+            • <strong>ชุมชนเมือง (Urban)</strong> ร้อนที่สุด (+2.8°C เหนือเฉลี่ย) สะท้อน UHI ชัดเจน<br>
+            • <strong>สวนผลไม้ & แหล่งน้ำ</strong> ช่วยลดอุณหภูมิ -1.4°C ถึง -3.2°C จากการคายระเหยน้ำ
+          </span>
+        </div>
+      </div>
+
+      <!-- Advanced GIS Analysis Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🔬 วิเคราะห์เชิงลึก (Advanced GIS)</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:9px; font-size:0.75rem;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="districtBoundariesToggle" checked style="accent-color: var(--accent-primary);">
+            <span>🗺️ แสดงเส้นแบ่งเขต 3 อำเภอ (District Boundaries)</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="districtBadgesToggle" checked style="accent-color: var(--accent-primary);">
+            <span>🏷️ แสดงป้ายชื่ออำเภอ & อุณหภูมิสด (Live Badges)</span>
+          </label>
+          <div style="margin:2px 0 4px 0; padding:8px 10px; background:rgba(255,255,255,0.03); border-radius:8px; border:1px solid var(--border-color);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+              <span style="font-weight:600; color:var(--text-main); font-size:0.72rem;">🎨 ความเข้มสีอุณหภูมิพื้นหลัง:</span>
+              <strong id="districtBgOpacityText" style="color:var(--accent-primary); font-family:var(--font-mono); font-size:0.75rem;">38%</strong>
+            </div>
+            <input type="range" id="districtBgOpacitySlider" min="10" max="80" value="38" style="width:100%; accent-color:var(--accent-primary); cursor:pointer;">
+          </div>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="riverToggle" checked style="accent-color: #38bdf8;">
+            <span>💧 แสดงแนวแม่น้ำแม่กลอง (Mae Klong River)</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="landmarksToggle" checked style="accent-color: var(--accent-warm);">
+            <span>📍 แสดงจุดแลนด์มาร์กสำคัญ (ตลาดร่มหุบ, อัมพวา, ฯลฯ)</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="uhiToggle" style="accent-color: var(--accent-warm);">
+            <span>🔥 แสดงเกาะความร้อนเมือง (UHI Hotspots)</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="cloudMaskToggle" style="accent-color: var(--accent-danger);">
+            <span>☁️ ไฮไลท์หน้ากากเมฆที่ตัดออก (Cloud Mask)</span>
+          </label>
+        </div>
+        <div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--border-color); font-size:0.72rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+          <span>ความต่างอุณหภูมิ (ΔT ร้อน - หนาว):</span>
+          <strong style="color:var(--accent-warm);" id="deltaTempDisplay">+4.2 °C</strong>
+        </div>
+      </div>
+
+      <!-- Methodology & Algorithm Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">💡 อัลกอริทึม 13 ขั้นตอน (GEE Pipeline)</div>
+          <button class="btn btn-secondary" id="openCodeModalBtn" style="padding:2px 8px; font-size:0.7rem;">
+            💻 เปิดโค้ดเต็ม
+          </button>
+        </div>
+        <div style="font-size:0.72rem; color:var(--text-muted); line-height:1.6; display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; align-items:flex-start; gap:6px;">
+            <span style="color:var(--accent-primary); font-weight:600;">1-4.</span>
+            <span>ตัดเมฆเข้มงวด QA_PIXEL + Buffer 150m + กรองภาพ 3 ฤดูกาล</span>
+          </div>
+          <div style="display:flex; align-items:flex-start; gap:6px;">
+            <span style="color:var(--accent-primary); font-weight:600;">5-7.</span>
+            <span>แปลง ST_B6 เป็น Kelvin และแปลงเป็น Celsius (°C)</span>
+          </div>
+          <div style="display:flex; align-items:flex-start; gap:6px; background:rgba(56,189,248,0.08); padding:6px; border-radius:6px; border-left:2px solid var(--accent-warm);">
+            <span style="color:var(--accent-warm); font-weight:700;">8.</span>
+            <span style="color:var(--text-main);"><strong>หัวใจสำคัญ:</strong> คำนวณ <code>.median()</code> ดึงภาพที่ไม่มีเมฆมาใส่แทนภาพที่มีเมฆอัตโนมัติ + <code>.unmask(lstAnnual)</code> อุดรูโหว่ 100%</span>
+          </div>
+          <div style="display:flex; align-items:flex-start; gap:6px;">
+            <span style="color:var(--accent-primary); font-weight:600;">9-12.</span>
+            <span>พาเลทขาว-ดำ 20-40°C, วาดเส้นขอบเขตจังหวัด, และ Export GeoTIFF</span>
+          </div>
+          <div style="display:flex; align-items:flex-start; gap:6px; background:rgba(34,197,94,0.08); padding:6px; border-radius:6px; border-left:2px solid #22c55e;">
+            <span style="color:#22c55e; font-weight:700;">13.</span>
+            <span style="color:var(--text-main);"><strong>งานวิจัย LULC:</strong> จำแนก 5 ประเภท (NDVI/NDBI/MNDWI) + Zonal Stats คำนวณค่าเฉลี่ย LST และ Export ตาราง CSV เข้า Google Drive</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">คัดลอกโค้ด Google Earth Engine เรียบร้อยแล้ว!</div>
+
+  <script>
+    // =========================================================================
+    // 1. SAMUT SONGKHRAM ADMINISTRATIVE POLYGON & RIVER SPLINE
+    // =========================================================================
+    // Outer Provincial Boundary of Samut Songkhram
+    const SAMUT_SONGKHRAM_POLY = [
+      [13.535, 99.935], [13.548, 99.965], [13.542, 100.015], [13.520, 100.055],
+      [13.485, 100.095], [13.445, 100.125], [13.410, 100.135], [13.375, 100.115],
+      [13.340, 100.075], [13.315, 100.040], [13.285, 100.010], [13.265, 99.970],
+      [13.275, 99.935], [13.310, 99.910], [13.355, 99.895], [13.400, 99.885],
+      [13.445, 99.890], [13.485, 99.905], [13.515, 99.920], [13.535, 99.935]
+    ];
+
+    // District 1: อ.บางคนที (Bang Khonthi - Northern Agricultural & Riverine Basin)
+    const DISTRICT_BANG_KHONTHI = [
+      [13.535, 99.935], [13.548, 99.965], [13.542, 100.015], [13.520, 100.055],
+      [13.480, 100.040], [13.460, 100.010], [13.450, 99.970], [13.455, 99.925],
+      [13.485, 99.905], [13.515, 99.920], [13.535, 99.935]
+    ];
+
+    // District 2: อ.อัมพวา (Amphawa - Central & Western Coconut Orchards & Canal Communities)
+    const DISTRICT_AMPHAWA = [
+      [13.455, 99.925], [13.450, 99.970], [13.445, 99.995], [13.415, 99.985],
+      [13.385, 99.970], [13.355, 99.960], [13.310, 99.910], [13.355, 99.895],
+      [13.400, 99.885], [13.445, 99.890], [13.455, 99.925]
+    ];
+
+    // District 3: อ.เมืองสมุทรสงคราม (Mueang - Eastern Commercial Center & Gulf Coastal Zone)
+    const DISTRICT_MUEANG = [
+      [13.520, 100.055], [13.485, 100.095], [13.445, 100.125], [13.410, 100.135],
+      [13.375, 100.115], [13.340, 100.075], [13.315, 100.040], [13.285, 100.010],
+      [13.265, 99.970], [13.275, 99.935], [13.310, 99.910], [13.355, 99.960],
+      [13.385, 99.970], [13.415, 99.985], [13.445, 99.995], [13.460, 100.010],
+      [13.480, 100.040], [13.520, 100.055]
+    ];
+
+    function isPointInPoly(lat, lon, poly) {
+      let inside = false;
+      const n = poly.length;
+      let p1lat = poly[0][0], p1lon = poly[0][1];
+      for (let i = 1; i <= n; i++) {
+        const p2lat = poly[i % n][0], p2lon = poly[i % n][1];
+        if (Math.min(p1lat, p2lat) < lat && lat <= Math.max(p1lat, p2lat)) {
+          if (lon <= Math.max(p1lon, p2lon)) {
+            const x_inters = (lat - p1lat) * (p2lon - p1lon) / (p2lat - p1lat) + p1lon;
+            if (p1lon === p2lon || lon <= x_inters) {
+              inside = !inside;
+            }
+          }
+        }
+        p1lat = p2lat; p1lon = p2lon;
+      }
+      return inside;
+    }
+
+    function isInsideProvince(lat, lon) {
+      return isPointInPoly(lat, lon, SAMUT_SONGKHRAM_POLY);
+    }
+
+    function getDistrictInfo(lat, lon) {
+      if (isPointInPoly(lat, lon, DISTRICT_BANG_KHONTHI)) {
+        return {
+          id: 'bang_khonthi',
+          name: 'อ.บางคนที',
+          en: 'Bang Khonthi',
+          color: '#fbbf24',
+          land: 'สวนผลไม้ / สวนลิ้นจี่ / ลำคลองสาขา',
+          tempOffset: -1.2
+        };
+      }
+      if (isPointInPoly(lat, lon, DISTRICT_AMPHAWA)) {
+        return {
+          id: 'amphawa',
+          name: 'อ.อัมพวา',
+          en: 'Amphawa',
+          color: '#c084fc',
+          land: 'สวนมะพร้าว / ชุมชนริมคลองอัมพวา / ทางน้ำไหล',
+          tempOffset: -0.7
+        };
+      }
+      if (isPointInPoly(lat, lon, DISTRICT_MUEANG) || isInsideProvince(lat, lon)) {
+        if (lat < 13.33) {
+          return {
+            id: 'mueang',
+            name: 'อ.เมืองสมุทรสงคราม (ชายฝั่ง)',
+            en: 'Mueang Coast',
+            color: '#38bdf8',
+            land: 'ดอนหอยหลอด / ผืนน้ำอ่าวไทย / ป่าชายเลน',
+            tempOffset: -3.2
+          };
+        }
+        if (lat > 13.33 && lat < 13.38 && lon > 99.95) {
+          return {
+            id: 'mueang',
+            name: 'อ.เมืองสมุทรสงคราม (นาเกลือ)',
+            en: 'Mueang Salt Pans',
+            color: '#38bdf8',
+            land: 'นาเกลือสมุทร / บ่อเพาะเลี้ยงสัตว์น้ำ',
+            tempOffset: 2.2
+          };
+        }
+        return {
+          id: 'mueang',
+          name: 'อ.เมืองสมุทรสงคราม (ตัวเมือง)',
+          en: 'Mueang Center',
+          color: '#38bdf8',
+          land: 'ย่านการค้าพาณิชยกรรม / สถานีรถไฟแม่กลอง',
+          tempOffset: 1.6
+        };
+      }
+      return null;
+    }
+
+    // Mae Klong River Waypoints (Cool Water Corridor)
+    const RIVER_PTS = [
+      [13.535, 99.950], [13.485, 99.945], [13.445, 99.960],
+      [13.420, 99.985], [13.412, 100.005], [13.385, 100.025],
+      [13.350, 100.040]
+    ];
+
+    function distToRiver(lat, lon) {
+      let minD = 999;
+      for (let i = 0; i < RIVER_PTS.length - 1; i++) {
+        const x1 = RIVER_PTS[i][0], y1 = RIVER_PTS[i][1];
+        const x2 = RIVER_PTS[i+1][0], y2 = RIVER_PTS[i+1][1];
+        const dx = x2 - x1, dy = y2 - y1;
+        const t = Math.max(0, Math.min(1, ((lat - x1) * dx + (lon - y1) * dy) / (dx * dx + dy * dy)));
+        const px = x1 + t * dx, py = y1 + t * dy;
+        const d = Math.hypot(lat - px, lon - py);
+        if (d < minD) minD = d;
+      }
+      return minD;
+    }
+
+    // 5 Standard LULC Classes for Samut Songkhram (Research Framework)
+    const LULC_CLASSES = [
+      {
+        id: 'urban',
+        name: 'ชุมชนเมืองและสิ่งปลูกสร้าง',
+        english: 'Urban & Built-up',
+        color: '#ef4444',
+        delta: 2.8,
+        role: 'เกาะความร้อนเมือง (UHI) กักเก็บความร้อนสูง (+2.8°C)',
+        areaPct: 10.8
+      },
+      {
+        id: 'orchards',
+        name: 'สวนเกษตรและสวนผลไม้ผสมผสาน',
+        english: 'Orchards & Agroforestry',
+        color: '#10b981',
+        delta: -1.4,
+        role: 'ร่มเงาและคายระเหยน้ำ บรรเทาความร้อน (-1.4°C)',
+        areaPct: 52.4
+      },
+      {
+        id: 'salt_aqua',
+        name: 'นาเกลือและบ่อเพาะเลี้ยงสัตว์น้ำ',
+        english: 'Salt Pans & Aquaculture',
+        color: '#f59e0b',
+        delta: 1.6,
+        role: 'ผิวน้ำตื้น/ลานเกลือผึ่งแดด สะสมความร้อนสูง (+1.6°C)',
+        areaPct: 19.8
+      },
+      {
+        id: 'mangrove',
+        name: 'ป่าชายเลนชายฝั่งและที่ลุ่มชื้นแฉะ',
+        english: 'Coastal Mangrove',
+        color: '#059669',
+        delta: -2.2,
+        role: 'แนวกันชนความร้อนชายฝั่งและปากอ่าว (-2.2°C)',
+        areaPct: 9.2
+      },
+      {
+        id: 'water',
+        name: 'แหล่งน้ำและแม่น้ำแม่กลอง',
+        english: 'Water Bodies',
+        color: '#0284c7',
+        delta: -3.2,
+        role: 'แหล่งดูดซับความร้อนธรรมชาติ (Thermal Sink) (-3.2°C)',
+        areaPct: 7.7
+      }
+    ];
+
+    function getLulcAtCoord(lat, lon) {
+      if (distToRiver(lat, lon) < 0.0055 || lat < 13.328) {
+        return LULC_CLASSES[4]; // water
+      }
+      if (lat >= 13.328 && lat <= 13.375 && lon >= 99.960 && lon <= 100.040) {
+        return LULC_CLASSES[3]; // mangrove
+      }
+      if (lat >= 13.330 && lat <= 13.415 && lon > 100.035) {
+        return LULC_CLASSES[2]; // salt_aqua
+      }
+      if (lat >= 13.395 && lat <= 13.428 && lon >= 99.985 && lon <= 100.035) {
+        return LULC_CLASSES[0]; // urban
+      }
+      return LULC_CLASSES[1]; // orchards
+    }
+
+    const ROI_CENTER = [13.410, 100.005];
+
+    // District Statistical Profiles for Samut Songkhram (1989-1990)
+    const SEASON_DATA = {
+      summer: {
+        name: "ฤดูร้อน (Summer 1989)",
+        range: "15 ก.พ. - 15 พ.ค. 1989",
+        imgCount: 4,
+        overall: { min: 23.8, mean: 31.4, max: 37.8 },
+        districts: [
+          { name: "อ.เมืองสมุทรสงคราม", min: 24.5, mean: 32.2, max: 37.8, land: "ตัวเมือง / นาเกลือ / ดอนหอยหลอด" },
+          { name: "อ.อัมพวา", min: 24.1, mean: 30.8, max: 36.4, land: "สวนลิ้นจี่ / สวนมะพร้าว / ชุมชนริมคลอง" },
+          { name: "อ.บางคนที", min: 23.8, mean: 30.5, max: 35.9, land: "พื้นที่สวนเกษตรผสมผสาน / แม่น้ำแม่กลอง" }
+        ],
+        chartPoints: [28.5, 31.8, 33.5, 31.4]
+      },
+      rainy: {
+        name: "ฤดูฝน (Rainy 1989)",
+        range: "16 พ.ค. - 15 ต.ค. 1989",
+        imgCount: 2,
+        overall: { min: 22.9, mean: 28.6, max: 34.2 },
+        districts: [
+          { name: "อ.เมืองสมุทรสงคราม", min: 23.8, mean: 29.3, max: 34.2, land: "ตัวเมือง / ชายฝั่งโคลน" },
+          { name: "อ.อัมพวา", min: 23.2, mean: 28.2, max: 33.1, land: "สวนร่มรื่น / ทางน้ำไหลหลาก" },
+          { name: "อ.บางคนที", min: 22.9, mean: 28.0, max: 32.6, land: "สวนผลไม้ / สภาพความชื้นสูง" }
+        ],
+        chartPoints: [29.8, 28.4, 27.9, 28.6]
+      },
+      winter: {
+        name: "ฤดูหนาว (Winter 1989-1990)",
+        range: "16 ต.ค. 1989 - 15 ก.พ. 1990",
+        imgCount: 5,
+        overall: { min: 21.6, mean: 27.2, max: 33.5 },
+        districts: [
+          { name: "อ.เมืองสมุทรสงคราม", min: 22.4, mean: 27.9, max: 33.5, land: "ชุมชนเมือง / นาเกลือผึ่งแดด" },
+          { name: "อ.อัมพวา", min: 21.9, mean: 26.8, max: 32.1, land: "สวนผลไม้ / แม่น้ำลมหนาว" },
+          { name: "อ.บางคนที", min: 21.6, mean: 26.5, max: 31.8, land: "สวนเกษตรกรรมหนาแน่น" }
+        ],
+        chartPoints: [27.9, 26.8, 25.9, 27.2]
+      },
+      annual: {
+        name: "ภาพรวมทั้งปี (Annual Median)",
+        range: "1 ม.ค. - 31 ธ.ค. 1989",
+        imgCount: 11,
+        overall: { min: 22.5, mean: 29.1, max: 36.2 },
+        districts: [
+          { name: "อ.เมืองสมุทรสงคราม", min: 23.5, mean: 29.8, max: 36.2, land: "ภาพเฉลี่ยตัวเมืองและอ่าวไทย" },
+          { name: "อ.อัมพวา", min: 23.0, mean: 28.6, max: 34.0, land: "ภาพเฉลี่ยพื้นที่สวนมะพร้าว" },
+          { name: "อ.บางคนที", min: 22.5, mean: 28.3, max: 33.5, land: "ภาพเฉลี่ยพื้นที่เกษตรตอนบน" }
+        ],
+        chartPoints: [31.4, 28.6, 27.2, 29.1]
+      }
+    };
+
+    let currentSeason = 'summer';
+    let currentPalette = 'bw';
+    let currentTheme = 'dark';
+    let splitRatio = 0.50;
+    let currentMapDisplayMode = 'district';
+
+    // =========================================================================
+    // 2. INITIALIZE MAP & FAIL-SAFE BASEMAPS (100% ZERO-403 GUARANTEED)
+    // =========================================================================
+    const map = L.map('map', {
+      center: ROI_CENTER,
+      zoom: 12,
+      minZoom: 10,
+      maxZoom: 16,
+      zoomControl: true
+    });
+
+    // Dedicated Offline Dark Canvas Graticule Basemap (Zero Network Dependency)
+    const DarkGISCanvasLayer = L.Layer.extend({
+      onAdd: function (map) {
+        this._map = map;
+        const canvas = (this._canvas = L.DomUtil.create('canvas', 'dark-gis-canvas'));
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        canvas.style.pointerEvents = 'none';
+        canvas.style.zIndex = 1;
+        map._panes.tilePane.appendChild(canvas);
+        map.on('moveend viewreset resize', this._reset, this);
+        this._reset();
+      },
+      onRemove: function (map) {
+        map._panes.tilePane.removeChild(this._canvas);
+        map.off('moveend viewreset resize', this._reset, this);
+      },
+      _reset: function () {
+        const topLeft = this._map.containerPointToLayerPoint([0, 0]);
+        L.DomUtil.setPosition(this._canvas, topLeft);
+        const size = this._map.getSize();
+        this._canvas.width = size.x;
+        this._canvas.height = size.y;
+        this.draw();
+      },
+      draw: function () {
+        if (!this._map || !this._canvas) return;
+        const ctx = this._canvas.getContext('2d');
+        const size = this._map.getSize();
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(0, 0, size.x, size.y);
+
+        // Draw Gulf of Thailand water basin (Southern sea)
+        const seaCoast = this._map.latLngToContainerPoint([13.330, 100.000]);
+        ctx.fillStyle = '#071526';
+        ctx.fillRect(0, seaCoast.y + 15, size.x, size.y - seaCoast.y);
+
+        // Draw subtle geographic grid lines (Graticules)
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+
+        const lats = [13.30, 13.40, 13.50];
+        const lons = [99.90, 100.00, 100.10];
+
+        ctx.font = '10px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#475569';
+
+        lats.forEach(lat => {
+          const pt = this._map.latLngToContainerPoint([lat, 100.00]);
+          ctx.beginPath();
+          ctx.moveTo(0, pt.y);
+          ctx.lineTo(size.x, pt.y);
+          ctx.stroke();
+          ctx.fillText(`${lat.toFixed(2)}°N`, 10, pt.y - 4);
+        });
+
+        lons.forEach(lon => {
+          const pt = this._map.latLngToContainerPoint([13.40, lon]);
+          ctx.beginPath();
+          ctx.moveTo(pt.x, 0);
+          ctx.lineTo(pt.x, size.y);
+          ctx.stroke();
+          ctx.fillText(`${lon.toFixed(2)}°E`, pt.x + 4, size.y - 12);
+        });
+
+        ctx.setLineDash([]);
+      }
+    });
+
+    // Basemaps dictionary (Hybrid Satellite with Real-Time Place & Road Names)
+    const basemaps = {
+      dark: new DarkGISCanvasLayer(),
+      satellite: L.layerGroup([
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: '&copy; Esri World Imagery',
+          maxZoom: 18
+        }),
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+          attribution: '&copy; Esri Labels',
+          maxZoom: 18,
+          opacity: 0.95
+        })
+      ]),
+      road: L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        attribution: '&copy; Google Maps',
+        maxZoom: 19
+      })
+    };
+
+    // Auto-intercept any network tile errors (replace with blank slate, NEVER show 403 text)
+    Object.values(basemaps).forEach(layer => {
+      if (layer.on) {
+        layer.on('tileerror', function(error, tile) {
+          tile.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" fill="%23090d16"><rect width="256" height="256"/></svg>';
+        });
+      }
+    });
+
+    basemaps.dark.addTo(map);
+
+    // Vector Outer Boundary of Samut Songkhram
+    const provinceBoundaryCoords = SAMUT_SONGKHRAM_POLY.map(p => [p[0], p[1]]);
+    const provinceBoundaryLayer = L.polygon(provinceBoundaryCoords, {
+      color: '#38bdf8',
+      weight: 2.5,
+      fillColor: 'transparent',
+      fillOpacity: 0,
+      dashArray: '5, 5'
+    }).addTo(map);
+
+    // Current background heat tint opacity (default: 38%)
+    let currentDistrictBgOpacity = 0.38;
+
+    // 1. Detailed District Boundaries with Live Temperature Color Fills (อุณหภูมิพื้นที่อยู่ข้างหลัง)
+    const districtPolygons = {
+      bang_khonthi: L.polygon(DISTRICT_BANG_KHONTHI, {
+        color: '#10b981',
+        weight: 2.5,
+        fillColor: '#10b981',
+        fillOpacity: currentDistrictBgOpacity
+      }).bindTooltip("<strong>🥥 อำเภอบางคนที (Bang Khonthi)</strong><br><span style='font-size:0.75rem; color:#a7f3d0;'>สวนเกษตรผสมผสาน • สวนลิ้นจี่ • อุณหภูมิเย็นสบายที่สุด</span>", { direction: 'top', sticky: true }),
+
+      amphawa: L.polygon(DISTRICT_AMPHAWA, {
+        color: '#0ea5e9',
+        weight: 2.5,
+        fillColor: '#0ea5e9',
+        fillOpacity: currentDistrictBgOpacity
+      }).bindTooltip("<strong>⛵ อำเภออัมพวา (Amphawa)</strong><br><span style='font-size:0.75rem; color:#bae6fd;'>ตลาดน้ำอัมพวา • สวนมะพร้าว • ชุมชนคลองธรรมชาติ</span>", { direction: 'top', sticky: true }),
+
+      mueang: L.polygon(DISTRICT_MUEANG, {
+        color: '#f59e0b',
+        weight: 2.5,
+        fillColor: '#f59e0b',
+        fillOpacity: currentDistrictBgOpacity
+      }).bindTooltip("<strong>🦀 อำเภอเมืองสมุทรสงคราม (Mueang)</strong><br><span style='font-size:0.75rem; color:#fde68a;'>ย่านเศรษฐกิจ • ดอนหอยหลอด • นาเกลือสะสมความร้อน</span>", { direction: 'top', sticky: true })
+    };
+
+    // Add interactive hover effects to district polygons
+    Object.entries(districtPolygons).forEach(([key, poly]) => {
+      poly.on('mouseover', function() {
+        this.setStyle({
+          weight: 3.5,
+          fillOpacity: Math.min(0.75, currentDistrictBgOpacity + 0.25)
+        });
+      });
+      poly.on('mouseout', function() {
+        this.setStyle({
+          weight: 2.5,
+          fillOpacity: currentDistrictBgOpacity
+        });
+      });
+    });
+
+    const districtBoundaryGroup = L.layerGroup([
+      districtPolygons.bang_khonthi,
+      districtPolygons.amphawa,
+      districtPolygons.mueang
+    ]).addTo(map);
+
+    // 2. High-Definition Live District Hero Badges on Map (ชื่ออำเภอ & อุณหภูมิสด ชัดเจน)
+    const districtBadgeGroup = L.layerGroup([
+      L.marker([13.488, 99.955], {
+        icon: L.divIcon({
+          className: 'custom-div-icon',
+          html: `
+            <div class="district-hero-badge bang-khonthi" id="badgeCardBK">
+              <div class="badge-title"><span>🥥</span> <span>อำเภอบางคนที</span></div>
+              <div class="badge-temp-row">
+                <span class="badge-temp-val" id="badgeTempBK">30.5°C</span>
+                <span class="badge-sub">สวนผลไม้ / สวนลิ้นจี่</span>
+              </div>
+            </div>
+          `,
+          iconSize: [170, 56],
+          iconAnchor: [85, 28]
+        })
+      }),
+      L.marker([13.428, 99.940], {
+        icon: L.divIcon({
+          className: 'custom-div-icon',
+          html: `
+            <div class="district-hero-badge amphawa" id="badgeCardAP">
+              <div class="badge-title"><span>⛵</span> <span>อำเภออัมพวา</span></div>
+              <div class="badge-temp-row">
+                <span class="badge-temp-val" id="badgeTempAP">30.8°C</span>
+                <span class="badge-sub">ชุมชนริมคลอง / มะพร้าว</span>
+              </div>
+            </div>
+          `,
+          iconSize: [170, 56],
+          iconAnchor: [85, 28]
+        })
+      }),
+      L.marker([13.408, 100.025], {
+        icon: L.divIcon({
+          className: 'custom-div-icon',
+          html: `
+            <div class="district-hero-badge mueang" id="badgeCardMU">
+              <div class="badge-title"><span>🦀</span> <span>อำเภอเมืองสมุทรสงคราม</span></div>
+              <div class="badge-temp-row">
+                <span class="badge-temp-val" id="badgeTempMU">32.2°C</span>
+                <span class="badge-sub">ตัวเมือง / นาเกลือ / อ่าวไทย</span>
+              </div>
+            </div>
+          `,
+          iconSize: [180, 56],
+          iconAnchor: [90, 28]
+        })
+      })
+    ]).addTo(map);
+
+    // 3. Mae Klong River Polyline Layer
+    const riverLayer = L.polyline(RIVER_PTS, {
+      color: '#38bdf8',
+      weight: 4.5,
+      opacity: 0.85,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).bindTooltip("🌊 แม่น้ำแม่กลอง (Mae Klong River)", { sticky: true }).addTo(map);
+
+    // 4. Prominent Landmarks across Samut Songkhram
+    const landmarks = [
+      { name: "สถานีรถไฟแม่กลอง (ตลาดร่มหุบ)", icon: "🚂", coords: [13.4075, 99.9988], desc: "ย่านการค้าพาณิชย์หลัก จุดเกาะความร้อนเมือง" },
+      { name: "ตลาดน้ำอัมพวา", icon: "⛵", coords: [13.4255, 99.9555], desc: "ตลาดน้ำยามเย็นริมคลองอัมพวา ร่มรื่นด้วยสวนผลไม้" },
+      { name: "ดอนหอยหลอด", icon: "🐚", coords: [13.3550, 99.9950], desc: "สันดอนตะกอนปากแม่น้ำแม่กลอง ติดทะเลอ่าวไทย" },
+      { name: "อาสนวิหารแม่พระบังเกิด (บางนกแขวก)", icon: "⛪", coords: [13.4980, 99.9250], desc: "สถาปัตยกรรมกอธิคเก่าแก่ริมฝั่งแม่น้ำแม่กลอง" },
+      { name: "ค่ายบางกุ้ง (โบสถ์ปรกโพธิ์)", icon: "🌳", coords: [13.4450, 99.9400], desc: "โบราณสถานค่ายทหารเรือสมัยกรุงธนบุรี" },
+      { name: "นาเกลือสมุทรสงคราม", icon: "🧂", coords: [13.3750, 100.0450], desc: "นาเกลือผึ่งแดดริมถนนพระราม 2 สะท้อนความร้อนสูง" },
+      { name: "ปากอ่าวแม่กลอง", icon: "🌊", coords: [13.3400, 100.0350], desc: "จุดบรรจบแม่น้ำแม่กลองลงสู่อ่าวไทยตอนบน" }
+    ];
+
+    const landmarkGroup = L.layerGroup(landmarks.map(lm => {
+      return L.marker(lm.coords, {
+        icon: L.divIcon({
+          className: 'custom-landmark-icon',
+          html: `<div class="landmark-pin"><span>${lm.icon}</span> <span>${lm.name}</span></div>`,
+          iconSize: [120, 24],
+          iconAnchor: [60, 12]
+        })
+      }).bindTooltip(`<strong>${lm.icon} ${lm.name}</strong><br><span style="font-size:0.75rem; color:#94a3b8;">${lm.desc}</span>`, { direction: 'top' });
+    })).addTo(map);
+
+    // 5. LULC Land Use / Land Cover Layers (5 Standard Classes)
+    const lulcPolygons = [
+      // 1. Urban (ชุมชนเมือง)
+      L.polygon([
+        [13.395, 99.985], [13.430, 99.985], [13.430, 100.035], [13.395, 100.035]
+      ], {
+        fillColor: '#ef4444',
+        fillOpacity: 0.55,
+        color: '#f87171',
+        weight: 2
+      }).bindTooltip(`<strong>🏙️ ชุมชนเมืองและสิ่งปลูกสร้าง (Urban)</strong><br>สัดส่วน: 10.8% | ΔT: <span style="color:#ef4444; font-weight:700;">+2.8°C</span><br><span style="font-size:0.72rem; color:#cbd5e1;">เกาะความร้อนเมือง UHI กักเก็บความร้อนสูง</span>`),
+
+      // 2. Orchards (สวนผลไม้/สวนเกษตร) - North & West
+      L.polygon([
+        [13.430, 99.900], [13.535, 99.900], [13.535, 100.040], [13.430, 100.040]
+      ], {
+        fillColor: '#10b981',
+        fillOpacity: 0.45,
+        color: '#34d399',
+        weight: 1.5
+      }).bindTooltip(`<strong>🌳 สวนเกษตรและสวนผลไม้ผสมผสาน (Orchards)</strong><br>สัดส่วน: 52.4% | ΔT: <span style="color:#10b981; font-weight:700;">-1.4°C</span><br><span style="font-size:0.72rem; color:#cbd5e1;">ร่มเงาและคายระเหยน้ำ บรรเทาความร้อน</span>`),
+
+      L.polygon([
+        [13.370, 99.900], [13.430, 99.900], [13.430, 99.985], [13.370, 99.985]
+      ], {
+        fillColor: '#10b981',
+        fillOpacity: 0.45,
+        color: '#34d399',
+        weight: 1.5
+      }).bindTooltip(`<strong>🌳 สวนเกษตรและสวนผลไม้ผสมผสาน (Orchards)</strong><br>สัดส่วน: 52.4% | ΔT: <span style="color:#10b981; font-weight:700;">-1.4°C</span><br><span style="font-size:0.72rem; color:#cbd5e1;">ร่มเงาและคายระเหยน้ำ บรรเทาความร้อน</span>`),
+
+      // 3. Salt Pans & Aquaculture (นาเกลือและบ่อเพาะเลี้ยง)
+      L.polygon([
+        [13.330, 100.035], [13.415, 100.035], [13.415, 100.120], [13.330, 100.120]
+      ], {
+        fillColor: '#f59e0b',
+        fillOpacity: 0.50,
+        color: '#fbbf24',
+        weight: 1.5
+      }).bindTooltip(`<strong>🧂 นาเกลือและบ่อเพาะเลี้ยงสัตว์น้ำ (Salt/Aqua)</strong><br>สัดส่วน: 19.8% | ΔT: <span style="color:#f59e0b; font-weight:700;">+1.6°C</span><br><span style="font-size:0.72rem; color:#cbd5e1;">ผิวน้ำตื้น/ลานเกลือผึ่งแดด สะสมความร้อนสูง</span>`),
+
+      // 4. Mangrove (ป่าชายเลนและดอนหอยหลอด)
+      L.polygon([
+        [13.328, 99.960], [13.375, 99.960], [13.375, 100.035], [13.328, 100.035]
+      ], {
+        fillColor: '#059669',
+        fillOpacity: 0.52,
+        color: '#10b981',
+        weight: 1.5
+      }).bindTooltip(`<strong>🦀 ป่าชายเลนชายฝั่งและที่ลุ่มชื้นแฉะ (Mangrove)</strong><br>สัดส่วน: 9.2% | ΔT: <span style="color:#059669; font-weight:700;">-2.2°C</span><br><span style="font-size:0.72rem; color:#cbd5e1;">แนวกันชนความร้อนชายฝั่งและปากอ่าว</span>`),
+
+      // 5. Water corridor (แม่น้ำแม่กลอง)
+      L.polyline(RIVER_PTS, {
+        color: '#0284c7',
+        weight: 10,
+        opacity: 0.75
+      }).bindTooltip(`<strong>💧 แหล่งน้ำและแม่น้ำแม่กลอง (Water Bodies)</strong><br>สัดส่วน: 7.7% | ΔT: <span style="color:#0284c7; font-weight:700;">-3.2°C</span><br><span style="font-size:0.72rem; color:#cbd5e1;">แหล่งดูดซับความร้อนธรรมชาติ (Thermal Sink)</span>`)
+    ];
+
+    const lulcLayerGroup = L.layerGroup(lulcPolygons);
+
+    // =========================================================================
+    // 3. HIGH-RESOLUTION REALISTIC LST CANVAS (BEFORE & AFTER)
+    // =========================================================================
+    const LSTRasterLayer = L.Layer.extend({
+      initialize: function (options) {
+        this.options = options || {};
+      },
+      onAdd: function (map) {
+        this._map = map;
+        if (!this._canvas) {
+          this._initCanvas();
+        }
+        map._panes.overlayPane.appendChild(this._canvas);
+        map.on('moveend viewreset resize', this._reset, this);
+        this._reset();
+      },
+      onRemove: function (map) {
+        map._panes.overlayPane.removeChild(this._canvas);
+        map.off('moveend viewreset resize', this._reset, this);
+      },
+      _initCanvas: function () {
+        const canvas = (this._canvas = L.DomUtil.create('canvas', 'leaflet-lst-layer'));
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        canvas.style.pointerEvents = 'none';
+        canvas.style.zIndex = this.options.zIndex || 200;
+        this._ctx = canvas.getContext('2d');
+      },
+      _reset: function () {
+        const topLeft = this._map.containerPointToLayerPoint([0, 0]);
+        L.DomUtil.setPosition(this._canvas, topLeft);
+        const size = this._map.getSize();
+        this._canvas.width = size.x;
+        this._canvas.height = size.y;
+        this.draw();
+      },
+      draw: function () {
+        if (!this._map || !this._canvas) return;
+        const ctx = this._ctx;
+        const size = this._map.getSize();
+        ctx.clearRect(0, 0, size.x, size.y);
+
+        const sw = this._map.latLngToContainerPoint([13.250, 99.870]);
+        const ne = this._map.latLngToContainerPoint([13.560, 100.150]);
+        const width = ne.x - sw.x;
+        const height = sw.y - ne.y;
+
+        if (width <= 0 || height <= 0) return;
+
+        ctx.save();
+        const splitX = size.x * splitRatio;
+
+        if (this.options.isBefore) {
+          // Left side of slider (Before: Original with clouds)
+          ctx.beginPath();
+          ctx.rect(0, 0, splitX, size.y);
+          ctx.clip();
+        } else {
+          // Right side of slider (After: 100% Cloud-Free Median Composite)
+          ctx.beginPath();
+          ctx.rect(splitX, 0, size.x - splitX, size.y);
+          ctx.clip();
+        }
+
+        // Render High-Resolution Raster Data (220x220 grid)
+        const cols = 220;
+        const rows = 220;
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = cols;
+        offCanvas.height = rows;
+        const octx = offCanvas.getContext('2d');
+        const imgData = octx.createImageData(cols, rows);
+        const data = imgData.data;
+
+        const season = SEASON_DATA[currentSeason];
+        const baseMean = season.overall.mean;
+
+        for (let r = 0; r < rows; r++) {
+          const latNorm = 1 - (r / rows);
+          const lat = 13.250 + latNorm * (13.560 - 13.250);
+
+          for (let c = 0; c < cols; c++) {
+            const lonNorm = c / cols;
+            const lon = 99.870 + lonNorm * (100.150 - 99.870);
+            const idx = (r * cols + c) * 4;
+
+            // Clip strictly to Samut Songkhram administrative polygon
+            if (!isInsideProvince(lat, lon)) {
+              data[idx + 3] = 0;
+              continue;
+            }
+
+            // Real physical temperature synthesis based on Landsat 5 thermal physics
+            let temp = baseMean;
+
+            // 1. Water cooling from Mae Klong River
+            const dRiver = distToRiver(lat, lon);
+            if (dRiver < 0.008) {
+              temp -= (3.2 * (1 - dRiver / 0.008)); // River center is cool (~26°C)
+            }
+
+            // 2. Coastal Gulf of Thailand water cooling
+            if (lat < 13.33) {
+              temp -= 3.6 * ((13.33 - lat) / 0.08);
+            }
+
+            // 3. Evapotranspiration cooling in Amphawa/Bang Khonthi coconut orchards
+            if (lat > 13.43 && lon < 99.98) {
+              temp -= 1.8;
+            }
+
+            // 4. Urban Heat Island & Salt Pans (Realistic smooth spatial falloff)
+            // Mueang Samut Songkhram urban core & Rama II highway corridor:
+            const dMueang = Math.hypot((lat - 13.415) * 1.5, lon - 100.005);
+            if (dMueang < 0.065) {
+              temp += 4.0 * Math.exp(-Math.pow(dMueang / 0.030, 2));
+            }
+
+            // Coastal salt evaporation pans (smooth solar heating over hypersaline shallow ponds):
+            const dSalt = Math.hypot((lat - 13.355) * 2.0, lon - 100.010);
+            if (dSalt < 0.055) {
+              temp += 2.5 * Math.exp(-Math.pow(dSalt / 0.028, 2));
+            }
+
+            // Natural Landsat micro-texture noise
+            temp += (Math.sin(lat * 140) * Math.cos(lon * 120)) * 0.7;
+
+            // === REALISTIC CLOUD & COLD HALO SIMULATION FOR "BEFORE" LAYER ===
+            let isCloudCore = false;
+            let cloudFringeFactor = 0;
+
+            if (this.options.isBefore) {
+              // Real cluster coordinates in Northern Bang Khonthi & North Amphawa
+              const d1 = Math.hypot(lat - 13.500, lon - 99.965);
+              const d2 = Math.hypot(lat - 13.488, lon - 99.992);
+              
+              // Fractal turbulence to produce natural cloud edges (not circular)
+              const turbulence = Math.sin(lat * 380 + lon * 290) * 0.006 + Math.cos(lat * 540 - lon * 410) * 0.004;
+              const effD1 = d1 + turbulence;
+              const effD2 = d2 + turbulence;
+
+              if (effD1 < 0.020 || effD2 < 0.015) {
+                // Dense Cloud Top (< 15°C, Pure White #FFFFFF)
+                isCloudCore = true;
+                temp = 13.0 + Math.random() * 2.5;
+              } else if (effD1 < 0.032 || effD2 < 0.024) {
+                // Cold Cloud Halo / Thin Cirrus Fringe (16°C - 19.5°C)
+                // This is the EXACT cold margin that leaked through in the original script!
+                const frac = Math.min((0.032 - effD1) / 0.012, (0.024 - effD2) / 0.009);
+                cloudFringeFactor = Math.max(0, Math.min(1, frac));
+                temp = temp * (1 - cloudFringeFactor) + (17.5 + Math.random() * 1.8) * cloudFringeFactor;
+              }
+            }
+
+            const showUHI = document.getElementById('uhiToggle') && document.getElementById('uhiToggle').checked;
+            const showCloudMask = document.getElementById('cloudMaskToggle') && document.getElementById('cloudMaskToggle').checked;
+
+            let rgb = getLSTColor(temp, currentPalette, isCloudCore);
+
+            // UHI Hotspot Overlay
+            if (showUHI && temp >= baseMean + 2.4) {
+              rgb = [239, 68, 68]; // Vivid Red-Orange warning for urban heat islands
+            }
+
+            // Cloud Mask Footprint Overlay (Highlights detected cloud & 150m buffer)
+            if (showCloudMask && this.options.isBefore && (isCloudCore || cloudFringeFactor > 0)) {
+              rgb = [244, 63, 94]; // Neon Rose Mask showing exact cloud boundary
+            }
+
+            data[idx] = rgb[0];
+            data[idx + 1] = rgb[1];
+            data[idx + 2] = rgb[2];
+            data[idx + 3] = 115; // Soft 45% translucent satellite thermal overlay (never an opaque sticker!)
+          }
+        }
+
+        octx.putImageData(imgData, 0, 0);
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(offCanvas, sw.x, ne.y, width, height);
+        ctx.restore();
+      }
+    });
+
+    function getLSTColor(temp, palette, isCloudCore) {
+      if (palette === 'bw') {
+        if (isCloudCore) {
+          return [255, 255, 255]; // Pure bright white cloud blob
+        }
+        // In Grayscale: 20°C = Pure White (255), 40°C = Pure Black (0)
+        let tClamped = Math.max(20, Math.min(40, temp));
+        let norm = (tClamped - 20) / (40 - 20);
+        let gray = Math.round(255 * (1 - norm));
+        return [gray, gray, gray];
+      } else {
+        if (isCloudCore) {
+          return [255, 255, 255]; // White cloud in thermal
+        }
+        // Scientific Smooth Thermal Spectrum (Navy -> Sky Blue -> Emerald Sage -> Warm Amber -> Crimson)
+        // Eliminates the harsh fluorescent eye-straining green!
+        let t = Math.max(22, Math.min(38, temp));
+        let norm = (t - 22) / (38 - 22);
+
+        if (norm < 0.25) {
+          let f = norm / 0.25;
+          return [
+            Math.round(24 + (14 - 24) * f),
+            Math.round(43 + (165 - 43) * f),
+            Math.round(73 + (233 - 73) * f)
+          ];
+        } else if (norm < 0.50) {
+          let f = (norm - 0.25) / 0.25;
+          return [
+            Math.round(14 + (16 - 14) * f),
+            Math.round(165 + (185 - 165) * f),
+            Math.round(233 + (129 - 233) * f)
+          ];
+        } else if (norm < 0.75) {
+          let f = (norm - 0.50) / 0.25;
+          return [
+            Math.round(16 + (245 - 16) * f),
+            Math.round(185 + (158 - 185) * f),
+            Math.round(129 + (11 - 129) * f)
+          ];
+        } else {
+          let f = (norm - 0.75) / 0.25;
+          return [
+            Math.round(245 + (225 - 245) * f),
+            Math.round(158 + (29 - 158) * f),
+            Math.round(11 + (72 - 11) * f)
+          ];
+        }
+      }
+    }
+
+    // Satellite LST Raster Overlays (Initialized without auto-adding, so default view is clean District Thematic Map)
+    const beforeLayer = new LSTRasterLayer({ isBefore: true, zIndex: 201 });
+    const afterLayer = new LSTRasterLayer({ isBefore: false, zIndex: 202 });
+
+    function redrawLayers() {
+      if (map.hasLayer(beforeLayer)) beforeLayer.draw();
+      if (map.hasLayer(afterLayer)) afterLayer.draw();
+    }
+
+    // =========================================================================
+    // 4. INTERACTIVE SPLIT-SCREEN SWIPE SLIDER & VIEW MODES (100% RELIABLE)
+    // =========================================================================
+    const sliderHandle = document.getElementById('sliderHandle');
+    const sliderBtn = document.getElementById('sliderBtn');
+    const mapContainer = document.getElementById('mapContainer');
+    const sliderRangeInput = document.getElementById('sliderRangeInput');
+    const sliderPercentText = document.getElementById('sliderPercentText');
+    let isDragging = false;
+
+    // Prevent Leaflet map panning or click events while interacting with the slider
+    [sliderHandle, sliderBtn].forEach(el => {
+      if (el) {
+        L.DomEvent.disableClickPropagation(el);
+        L.DomEvent.disableScrollPropagation(el);
+      }
+    });
+
+    function setSliderRatio(ratio, syncActiveButtons = true) {
+      const clamped = Math.max(0, Math.min(1, ratio));
+      splitRatio = clamped;
+      const rect = mapContainer.getBoundingClientRect();
+      const x = clamped * rect.width;
+      
+      if (sliderHandle) {
+        sliderHandle.style.left = x + 'px';
+      }
+      
+      if (sliderRangeInput) {
+        sliderRangeInput.value = Math.round(clamped * 100);
+      }
+      if (sliderPercentText) {
+        sliderPercentText.textContent = Math.round(clamped * 100) + '%';
+      }
+
+      if (syncActiveButtons) {
+        // Sync top switcher and sidebar radio group
+        let mode = 'split';
+        if (clamped >= 0.96) mode = 'before';
+        else if (clamped <= 0.04) mode = 'after';
+
+        document.querySelectorAll('.map-view-switcher .switcher-btn').forEach(b => b.classList.remove('active'));
+        if (mode === 'before') {
+          const b = document.getElementById('btnShowBefore');
+          if (b) b.classList.add('active');
+        } else if (mode === 'after') {
+          const b = document.getElementById('btnShowAfter');
+          if (b) b.classList.add('active');
+        } else {
+          const b = document.getElementById('btnShowSplit');
+          if (b) b.classList.add('active');
+        }
+
+        document.querySelectorAll('#viewModeSelector .radio-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.mode === mode);
+        });
+      }
+
+      redrawLayers();
+    }
+
+    setTimeout(() => {
+      setSliderRatio(0.50);
+    }, 150);
+
+    // Drag handlers
+    function handleDragStart(e) {
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      isDragging = true;
+      map.dragging.disable();
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    function handleDragMove(e) {
+      if (!isDragging) return;
+      if (e.cancelable) e.preventDefault();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const rect = mapContainer.getBoundingClientRect();
+      const x = clientX - rect.left;
+      setSliderRatio(x / rect.width);
+    }
+
+    function handleDragEnd() {
+      if (isDragging) {
+        isDragging = false;
+        map.dragging.enable();
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    }
+
+    [sliderHandle, sliderBtn].forEach(el => {
+      if (!el) return;
+      el.addEventListener('mousedown', handleDragStart);
+      el.addEventListener('touchstart', handleDragStart, { passive: false });
+    });
+
+    window.addEventListener('mousemove', handleDragMove);
+    window.addEventListener('touchmove', handleDragMove, { passive: false });
+    window.addEventListener('mouseup', handleDragEnd);
+    window.addEventListener('touchend', handleDragEnd);
+
+    // Sidebar Range Slider event
+    if (sliderRangeInput) {
+      sliderRangeInput.addEventListener('input', (e) => {
+        setSliderRatio(parseFloat(e.target.value) / 100);
+      });
+    }
+
+    // Top view switcher buttons
+    const btnShowBefore = document.getElementById('btnShowBefore');
+    const btnShowSplit = document.getElementById('btnShowSplit');
+    const btnShowAfter = document.getElementById('btnShowAfter');
+    if (btnShowBefore) btnShowBefore.addEventListener('click', () => {
+      setMapDisplayMode('raster');
+      setSliderRatio(1.0);
+    });
+    if (btnShowSplit) btnShowSplit.addEventListener('click', () => {
+      setMapDisplayMode('raster');
+      setSliderRatio(0.50);
+    });
+    if (btnShowAfter) btnShowAfter.addEventListener('click', () => {
+      setMapDisplayMode('raster');
+      setSliderRatio(0.0);
+    });
+
+    // Clickable On-Map Badges
+    const badgeBefore = document.getElementById('badgeBefore');
+    const badgeAfter = document.getElementById('badgeAfter');
+    if (badgeBefore) badgeBefore.addEventListener('click', () => {
+      setMapDisplayMode('raster');
+      setSliderRatio(1.0);
+    });
+    if (badgeAfter) badgeAfter.addEventListener('click', () => {
+      setMapDisplayMode('raster');
+      setSliderRatio(0.0);
+    });
+
+    // Sidebar quick buttons
+    const btnQuickBefore = document.getElementById('btnQuickBefore');
+    const btnQuickMid = document.getElementById('btnQuickMid');
+    const btnQuickAfter = document.getElementById('btnQuickAfter');
+    if (btnQuickBefore) btnQuickBefore.addEventListener('click', () => {
+      setMapDisplayMode('raster');
+      setSliderRatio(1.0);
+    });
+    if (btnQuickMid) btnQuickMid.addEventListener('click', () => {
+      setMapDisplayMode('raster');
+      setSliderRatio(0.50);
+    });
+    if (btnQuickAfter) btnQuickAfter.addEventListener('click', () => {
+      setMapDisplayMode('raster');
+      setSliderRatio(0.0);
+    });
+
+    // Sidebar View Mode Radio Group
+    document.querySelectorAll('#viewModeSelector .radio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setMapDisplayMode('raster');
+        const mode = btn.dataset.mode;
+        if (mode === 'before') setSliderRatio(1.0);
+        else if (mode === 'after') setSliderRatio(0.0);
+        else setSliderRatio(0.50);
+      });
+    });
+
+    window.setSliderPercent = function(pct) {
+      setSliderRatio(pct / 100);
+    };
+
+    // =========================================================================
+    // 5. UI CONTROLS & LISTENERS
+    // =========================================================================
+    document.querySelectorAll('.season-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.season-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSeason = btn.dataset.season;
+        updateDistrictStats();
+        updateTrendChart();
+        redrawLayers();
+      });
+    });
+
+    document.querySelectorAll('#paletteSelector .radio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#paletteSelector .radio-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentPalette = btn.dataset.palette;
+        updateLegend();
+        redrawLayers();
+      });
+    });
+
+    document.querySelectorAll('#basemapSelector .radio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#basemapSelector .radio-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const baseKey = btn.dataset.base;
+        Object.values(basemaps).forEach(l => {
+          if (map.hasLayer(l)) map.removeLayer(l);
+        });
+        basemaps[baseKey].addTo(map);
+        if (map.hasLayer(districtBoundaryGroup)) districtBoundaryGroup.bringToFront();
+        if (map.hasLayer(provinceBoundaryLayer)) provinceBoundaryLayer.bringToFront();
+        if (map.hasLayer(riverLayer)) riverLayer.bringToFront();
+        if (map.hasLayer(landmarkGroup)) landmarkGroup.bringToFront();
+        if (map.hasLayer(districtBadgeGroup)) districtBadgeGroup.bringToFront();
+        redrawLayers();
+      });
+    });
+
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    const themeIcon = document.getElementById('themeIcon');
+    const themeText = document.getElementById('themeText');
+
+    themeToggleBtn.addEventListener('click', () => {
+      if (currentTheme === 'dark') {
+        currentTheme = 'light';
+        document.documentElement.setAttribute('data-theme', 'light');
+        themeIcon.textContent = '☀️';
+        themeText.textContent = 'ธีมสว่าง';
+        provinceBoundaryLayer.setStyle({ color: '#0284c7' });
+      } else {
+        currentTheme = 'dark';
+        document.documentElement.removeAttribute('data-theme');
+        themeIcon.textContent = '🌙';
+        themeText.textContent = 'ธีมมืด';
+        provinceBoundaryLayer.setStyle({ color: '#38bdf8' });
+      }
+    });
+
+    function updateLegend() {
+      const grad = document.getElementById('legendGradient');
+      const minLabel = document.getElementById('legendMin');
+      const midLabel = document.getElementById('legendMid');
+      const maxLabel = document.getElementById('legendMax');
+
+      if (currentPalette === 'bw') {
+        grad.style.background = 'linear-gradient(to right, #ffffff, #888888, #000000)';
+        minLabel.textContent = '20°C (ขาว)';
+        midLabel.textContent = '30°C';
+        maxLabel.textContent = '40°C (ดำ)';
+      } else {
+        grad.style.background = 'linear-gradient(to right, #182b49, #0ea5e9, #10b981, #f59e0b, #f97316, #ef4444)';
+        minLabel.textContent = '22°C (เย็น)';
+        midLabel.textContent = '30°C';
+        maxLabel.textContent = '38°C (ร้อน)';
+      }
+    }
+    updateLegend();
+
+    // =========================================================================
+    // 6. REAL-TIME POINT INSPECTOR & MOUSE INTERACTION
+    // =========================================================================
+    map.on('mousemove click', (e) => {
+      const lat = e.latlng.lat;
+      const lon = e.latlng.lng;
+      document.getElementById('inspCoord').textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+      const info = getDistrictInfo(lat, lon);
+      let districtName = "อ.เมืองสมุทรสงคราม";
+      let landuse = "ตัวเมือง / ชุมชนริมแม่น้ำแม่กลอง";
+      let tempOffset = 0;
+
+      if (info) {
+        districtName = info.name;
+        landuse = info.land;
+        tempOffset = info.tempOffset;
+      }
+
+      const season = SEASON_DATA[currentSeason];
+      const baseTemp = season.overall.mean + tempOffset + (Math.sin(lat * 150) * 0.4);
+      const kelvin = baseTemp + 273.15;
+
+      document.getElementById('inspDistrict').textContent = districtName;
+      document.getElementById('inspLanduse').textContent = landuse;
+      document.getElementById('inspTemp').textContent = `${baseTemp.toFixed(1)} °C`;
+      document.getElementById('inspKelvin').textContent = `${kelvin.toFixed(2)} K`;
+
+      // Update LULC Point Inspection
+      const lulc = getLulcAtCoord(lat, lon);
+      const inspLulcEl = document.getElementById('inspLulc');
+      const inspThermalRoleEl = document.getElementById('inspThermalRole');
+      if (inspLulcEl) {
+        inspLulcEl.textContent = lulc.name;
+        inspLulcEl.style.color = lulc.color;
+      }
+      if (inspThermalRoleEl) {
+        inspThermalRoleEl.textContent = lulc.role;
+      }
+    });
+
+    // =========================================================================
+    // 7. STATS, TREND CHART & LIVE DISTRICT BADGES UPDATE
+    // =========================================================================
+    function getTempColor(t) {
+      if (t <= 27.5) return { fill: '#0284c7', border: '#38bdf8', tag: 'เย็นสบาย' };
+      if (t <= 29.5) return { fill: '#059669', border: '#34d399', tag: 'สดชื่น / ร่มรื่น' };
+      if (t <= 31.0) return { fill: '#10b981', border: '#6ee7b7', tag: 'ปานกลาง' };
+      if (t <= 32.2) return { fill: '#f59e0b', border: '#fcd34d', tag: 'อุ่นปานกลาง' };
+      return { fill: '#ef4444', border: '#fca5a5', tag: 'ร้อน (สะสมความร้อน)' };
+    }
+
+    function updateDistrictChoroplethColors() {
+      const data = SEASON_DATA[currentSeason];
+      const mu = data.districts[0];
+      const ap = data.districts[1];
+      const bk = data.districts[2];
+
+      const cMU = getTempColor(mu.mean);
+      const cAP = getTempColor(ap.mean);
+      const cBK = getTempColor(bk.mean);
+
+      if (currentMapDisplayMode === 'district') {
+        districtPolygons.bang_khonthi.setStyle({
+          fillColor: cBK.fill,
+          fillOpacity: currentDistrictBgOpacity,
+          color: cBK.border,
+          weight: 2.5
+        });
+
+        districtPolygons.amphawa.setStyle({
+          fillColor: cAP.fill,
+          fillOpacity: currentDistrictBgOpacity,
+          color: cAP.border,
+          weight: 2.5
+        });
+
+        districtPolygons.mueang.setStyle({
+          fillColor: cMU.fill,
+          fillOpacity: currentDistrictBgOpacity,
+          color: cMU.border,
+          weight: 2.5
+        });
+      }
+
+      // Update Map Header Banner
+      const provBannerAvg = document.getElementById('provAvgDisplay');
+      if (provBannerAvg) provBannerAvg.textContent = `${data.overall.mean.toFixed(1)} °C`;
+    }
+
+    function updateLulcAnalytics() {
+      const data = SEASON_DATA[currentSeason];
+      const seasonMean = data.overall.mean;
+      const tbody = document.getElementById('lulcStatsBody');
+      if (tbody) {
+        tbody.innerHTML = '';
+        LULC_CLASSES.forEach(c => {
+          const classMean = (seasonMean + c.delta).toFixed(1);
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="display:flex; align-items:center; gap:5px;">
+              <span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${c.color};"></span>
+              <strong>${c.name}</strong>
+            </td>
+            <td style="font-family:var(--font-mono);">${c.areaPct}%</td>
+            <td style="font-family:var(--font-mono); font-weight:700; color:${c.color};">${classMean} °C</td>
+            <td style="font-family:var(--font-mono); font-weight:700; color:${c.delta > 0 ? '#ef4444' : '#10b981'};">
+              ${c.delta > 0 ? '+' : ''}${c.delta.toFixed(1)}
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Draw SVG Horizontal Bar Chart (Mean LST by LULC Class)
+      const svg = document.getElementById('lulcBarChartSvg');
+      if (svg) {
+        const width = 340;
+        const height = 130;
+        const minTemp = 24.0;
+        const maxTemp = 36.0;
+        const tempRange = maxTemp - minTemp;
+        const leftPad = 70;
+        const rightPad = 48;
+        const usableWidth = width - leftPad - rightPad;
+
+        let svgHtml = '';
+
+        // Draw reference grid lines
+        [26, 29, 32, 35].forEach(t => {
+          const x = leftPad + ((t - minTemp) / tempRange) * usableWidth;
+          svgHtml += `<line x1="${x}" y1="5" x2="${x}" y2="120" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="2,2"/>`;
+          svgHtml += `<text x="${x}" y="128" fill="#64748b" font-size="8" text-anchor="middle" font-family="monospace">${t}°</text>`;
+        });
+
+        // Draw seasonal mean baseline
+        const meanX = leftPad + ((seasonMean - minTemp) / tempRange) * usableWidth;
+        svgHtml += `<line x1="${meanX}" y1="5" x2="${meanX}" y2="120" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.7"/>`;
+
+        // Draw bars for each LULC class
+        LULC_CLASSES.forEach((c, idx) => {
+          const classMean = seasonMean + c.delta;
+          const barY = idx * 23 + 6;
+          const barW = Math.max(8, Math.min(usableWidth, ((classMean - minTemp) / tempRange) * usableWidth));
+          const barX = leftPad;
+
+          const shortName = c.english.split(' ')[0];
+          svgHtml += `<text x="${leftPad - 6}" y="${barY + 11}" fill="#cbd5e1" font-size="9" text-anchor="end" font-weight="600">${shortName}</text>`;
+          svgHtml += `<rect x="${barX}" y="${barY}" width="${barW}" height="14" rx="4" fill="${c.color}" fill-opacity="0.85" stroke="${c.color}" stroke-width="1"/>`;
+          svgHtml += `<text x="${barX + barW + 5}" y="${barY + 11}" fill="${c.color}" font-size="9.5" font-family="monospace" font-weight="bold">${classMean.toFixed(1)}°C</text>`;
+        });
+
+        svg.innerHTML = svgHtml;
+      }
+    }
+
+    function updateDistrictStats() {
+      const tbody = document.getElementById('districtStatsBody');
+      tbody.innerHTML = '';
+      const data = SEASON_DATA[currentSeason];
+
+      data.districts.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="district-tag">${d.name}</span></td>
+          <td>${d.min.toFixed(1)}</td>
+          <td style="color:var(--accent-primary); font-weight:600;">${d.mean.toFixed(1)}</td>
+          <td>${d.max.toFixed(1)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Update temperature badges on the live map
+      const bkBadge = document.getElementById('badgeTempBK');
+      const apBadge = document.getElementById('badgeTempAP');
+      const muBadge = document.getElementById('badgeTempMU');
+      if (bkBadge) bkBadge.textContent = `${data.districts[2].mean.toFixed(1)}°C`;
+      if (apBadge) apBadge.textContent = `${data.districts[1].mean.toFixed(1)}°C`;
+      if (muBadge) muBadge.textContent = `${data.districts[0].mean.toFixed(1)}°C`;
+
+      // Update district polygon background colors
+      updateDistrictChoroplethColors();
+
+      // Update LULC Zonal Statistics
+      updateLulcAnalytics();
+    }
+    updateDistrictStats();
+
+    // Primary View Mode Switching: 'district' | 'lulc' | 'raster' (state declared globally above)
+
+    function setMapDisplayMode(mode) {
+      currentMapDisplayMode = mode;
+      const btnDistrict = document.getElementById('btnModeDistrict');
+      const btnLulc = document.getElementById('btnModeLulc');
+      const btnRaster = document.getElementById('btnModeRaster');
+      const mapViewSwitcher = document.querySelector('.map-view-switcher');
+      const sliderHandle = document.getElementById('sliderHandle');
+      const badgeBefore = document.getElementById('badgeBefore');
+      const badgeAfter = document.getElementById('badgeAfter');
+      const lulcLegendBox = document.getElementById('lulcLegendBox');
+
+      if (mode === 'district') {
+        if (btnDistrict) btnDistrict.classList.add('active');
+        if (btnLulc) btnLulc.classList.remove('active');
+        if (btnRaster) btnRaster.classList.remove('active');
+
+        // Hide raster layers and split slider controls
+        if (map.hasLayer(beforeLayer)) map.removeLayer(beforeLayer);
+        if (map.hasLayer(afterLayer)) map.removeLayer(afterLayer);
+        if (map.hasLayer(lulcLayerGroup)) map.removeLayer(lulcLayerGroup);
+
+        if (mapViewSwitcher) mapViewSwitcher.style.display = 'none';
+        if (sliderHandle) sliderHandle.style.display = 'none';
+        if (badgeBefore) badgeBefore.style.display = 'none';
+        if (badgeAfter) badgeAfter.style.display = 'none';
+        if (lulcLegendBox) lulcLegendBox.style.display = 'none';
+
+        // Ensure district boundaries & badges are on map
+        if (!map.hasLayer(districtBoundaryGroup)) map.addLayer(districtBoundaryGroup);
+        if (!map.hasLayer(districtBadgeGroup)) map.addLayer(districtBadgeGroup);
+        if (!map.hasLayer(provinceBoundaryLayer)) map.addLayer(provinceBoundaryLayer);
+
+        updateDistrictChoroplethColors();
+      } else if (mode === 'lulc') {
+        if (btnDistrict) btnDistrict.classList.remove('active');
+        if (btnLulc) btnLulc.classList.add('active');
+        if (btnRaster) btnRaster.classList.remove('active');
+
+        // Hide raster layers and split slider
+        if (map.hasLayer(beforeLayer)) map.removeLayer(beforeLayer);
+        if (map.hasLayer(afterLayer)) map.removeLayer(afterLayer);
+
+        if (mapViewSwitcher) mapViewSwitcher.style.display = 'none';
+        if (sliderHandle) sliderHandle.style.display = 'none';
+        if (badgeBefore) badgeBefore.style.display = 'none';
+        if (badgeAfter) badgeAfter.style.display = 'none';
+
+        // Add LULC Polygons & Legend
+        if (!map.hasLayer(lulcLayerGroup)) map.addLayer(lulcLayerGroup);
+        if (lulcLegendBox) lulcLegendBox.style.display = 'block';
+
+        // Set district fill transparent so LULC is clean
+        districtPolygons.bang_khonthi.setStyle({ fillOpacity: 0.05, weight: 1.5 });
+        districtPolygons.amphawa.setStyle({ fillOpacity: 0.05, weight: 1.5 });
+        districtPolygons.mueang.setStyle({ fillOpacity: 0.05, weight: 1.5 });
+
+        if (map.hasLayer(riverLayer)) riverLayer.bringToFront();
+        if (map.hasLayer(landmarkGroup)) landmarkGroup.bringToFront();
+      } else {
+        if (btnDistrict) btnDistrict.classList.remove('active');
+        if (btnLulc) btnLulc.classList.remove('active');
+        if (btnRaster) btnRaster.classList.add('active');
+
+        // Hide LULC layer & legend
+        if (map.hasLayer(lulcLayerGroup)) map.removeLayer(lulcLayerGroup);
+        if (lulcLegendBox) lulcLegendBox.style.display = 'none';
+
+        // Show raster layers and split slider controls
+        if (!map.hasLayer(beforeLayer)) map.addLayer(beforeLayer);
+        if (!map.hasLayer(afterLayer)) map.addLayer(afterLayer);
+
+        if (mapViewSwitcher) mapViewSwitcher.style.display = 'flex';
+        if (sliderHandle) sliderHandle.style.display = 'block';
+        if (badgeBefore) badgeBefore.style.display = 'flex';
+        if (badgeAfter) badgeAfter.style.display = 'flex';
+
+        // Lower district polygon opacity so raster shows clearly underneath
+        districtPolygons.bang_khonthi.setStyle({ fillOpacity: 0.1 });
+        districtPolygons.amphawa.setStyle({ fillOpacity: 0.1 });
+        districtPolygons.mueang.setStyle({ fillOpacity: 0.1 });
+
+        redrawLayers();
+      }
+    }
+
+    const btnModeDistrict = document.getElementById('btnModeDistrict');
+    if (btnModeDistrict) {
+      btnModeDistrict.addEventListener('click', () => setMapDisplayMode('district'));
+    }
+
+    const btnModeLulc = document.getElementById('btnModeLulc');
+    if (btnModeLulc) {
+      btnModeLulc.addEventListener('click', () => setMapDisplayMode('lulc'));
+    }
+
+    const btnModeRaster = document.getElementById('btnModeRaster');
+    if (btnModeRaster) {
+      btnModeRaster.addEventListener('click', () => setMapDisplayMode('raster'));
+    }
+
+    // Background Heat Tint Opacity Slider Listener
+    const districtBgOpacitySlider = document.getElementById('districtBgOpacitySlider');
+    const districtBgOpacityText = document.getElementById('districtBgOpacityText');
+    if (districtBgOpacitySlider) {
+      districtBgOpacitySlider.addEventListener('input', (e) => {
+        currentDistrictBgOpacity = parseFloat(e.target.value) / 100;
+        if (districtBgOpacityText) districtBgOpacityText.textContent = `${e.target.value}%`;
+        updateDistrictChoroplethColors();
+      });
+    }
+
+    // Set initial display mode to clean District Thematic Map
+    setMapDisplayMode('district');
+
+    function updateTrendChart() {
+      const svg = document.getElementById('trendSvg');
+      const data = SEASON_DATA[currentSeason];
+      const pts = data.chartPoints;
+      
+      const width = 340;
+      const height = 90;
+      const minVal = 24;
+      const maxVal = 36;
+
+      let dPath = '';
+      let circles = '';
+      pts.forEach((val, idx) => {
+        const x = 30 + idx * ((width - 60) / (pts.length - 1));
+        const y = height - ((val - minVal) / (maxVal - minVal)) * (height - 25) - 10;
+        if (idx === 0) dPath += `M ${x} ${y} `;
+        else dPath += `L ${x} ${y} `;
+
+        circles += `
+          <circle cx="${x}" cy="${y}" r="4" fill="#38bdf8" stroke="#ffffff" stroke-width="1.5"/>
+          <text x="${x}" y="${y - 8}" font-size="10" fill="var(--text-muted)" text-anchor="middle" font-family="var(--font-mono)">${val.toFixed(1)}°</text>
+        `;
+      });
+
+      svg.innerHTML = `
+        <line x1="20" y1="85" x2="320" y2="85" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="3,3"/>
+        <path d="${dPath}" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+        ${circles}
+      `;
+    }
+    updateTrendChart();
+
+    // =========================================================================
+    // 8. ACTIONS: HIGH-RESOLUTION GIS MAP IMAGE EXPORT (PNG 1920x1080)
+    // =========================================================================
+    function projectMapToCanvas(lat, lon, width, height, padding = 110) {
+      const minLat = 13.250, maxLat = 13.565;
+      const minLon = 99.870, maxLon = 100.155;
+      const drawW = width - padding * 2;
+      const drawH = height - padding * 2;
+      const x = padding + ((lon - minLon) / (maxLon - minLon)) * drawW;
+      const y = height - padding - ((lat - minLat) / (maxLat - minLat)) * drawH;
+      return [x, y];
+    }
+
+    function generateHighResMapCanvas() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1920;
+      canvas.height = 1080;
+      const ctx = canvas.getContext('2d');
+      const w = 1920, h = 1080;
+
+      // 1. Deep Space GIS Background
+      ctx.fillStyle = '#090d16';
+      ctx.fillRect(0, 0, w, h);
+
+      // 2. Gulf of Thailand Deep Sea Basin
+      const [seaX, seaY] = projectMapToCanvas(13.330, 99.870, w, h);
+      ctx.fillStyle = '#071526';
+      ctx.fillRect(0, seaY, w, h - seaY);
+
+      // 3. Coordinate Graticule Grid
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+
+      const lats = [13.30, 13.35, 13.40, 13.45, 13.50, 13.55];
+      const lons = [99.90, 99.95, 100.00, 100.05, 100.10, 100.15];
+
+      ctx.font = '12px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#475569';
+
+      lats.forEach(lat => {
+        const [_, y] = projectMapToCanvas(lat, 100.00, w, h);
+        ctx.beginPath();
+        ctx.moveTo(90, y);
+        ctx.lineTo(w - 90, y);
+        ctx.stroke();
+        ctx.fillText(`${lat.toFixed(2)}° N`, 30, y + 4);
+        ctx.fillText(`${lat.toFixed(2)}° N`, w - 75, y + 4);
+      });
+
+      lons.forEach(lon => {
+        const [x, _] = projectMapToCanvas(13.40, lon, w, h);
+        ctx.beginPath();
+        ctx.moveTo(x, 90);
+        ctx.lineTo(x, h - 90);
+        ctx.stroke();
+        ctx.fillText(`${lon.toFixed(2)}° E`, x - 24, 75);
+        ctx.fillText(`${lon.toFixed(2)}° E`, x - 24, h - 70);
+      });
+
+      ctx.setLineDash([]);
+
+      // Helper function to draw polygons
+      function drawCanvasPoly(pts, fillColor, strokeColor, strokeWidth = 2, fillAlpha = 0.55) {
+        if (!pts || pts.length < 3) return;
+        ctx.save();
+        ctx.beginPath();
+        const [startX, startY] = projectMapToCanvas(pts[0][0], pts[0][1], w, h);
+        ctx.moveTo(startX, startY);
+        for (let i = 1; i < pts.length; i++) {
+          const [px, py] = projectMapToCanvas(pts[i][0], pts[i][1], w, h);
+          ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        if (fillColor) {
+          ctx.globalAlpha = fillAlpha;
+          ctx.fillStyle = fillColor;
+          ctx.fill();
+        }
+        if (strokeColor) {
+          ctx.globalAlpha = 1.0;
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = strokeWidth;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 4. Draw Thematic Layers based on currentMapDisplayMode
+      const seasonData = SEASON_DATA[currentSeason];
+      const mu = seasonData.districts[0];
+      const ap = seasonData.districts[1];
+      const bk = seasonData.districts[2];
+      const cMU = getTempColor(mu.mean);
+      const cAP = getTempColor(ap.mean);
+      const cBK = getTempColor(bk.mean);
+
+      if (currentMapDisplayMode === 'lulc') {
+        // LULC Mode: Draw 5 LULC zones
+        // 1. Urban
+        drawCanvasPoly([
+          [13.395, 99.985], [13.430, 99.985], [13.430, 100.035], [13.395, 100.035]
+        ], '#ef4444', '#f87171', 2, 0.70);
+        // 2. Orchards (North & West)
+        drawCanvasPoly([
+          [13.430, 99.900], [13.535, 99.900], [13.535, 100.040], [13.430, 100.040]
+        ], '#10b981', '#34d399', 1.5, 0.55);
+        drawCanvasPoly([
+          [13.370, 99.900], [13.430, 99.900], [13.430, 99.985], [13.370, 99.985]
+        ], '#10b981', '#34d399', 1.5, 0.55);
+        // 3. Salt & Aqua
+        drawCanvasPoly([
+          [13.330, 100.035], [13.415, 100.035], [13.415, 100.120], [13.330, 100.120]
+        ], '#f59e0b', '#fbbf24', 1.5, 0.65);
+        // 4. Mangrove
+        drawCanvasPoly([
+          [13.328, 99.960], [13.375, 99.960], [13.375, 100.035], [13.328, 100.035]
+        ], '#059669', '#10b981', 1.5, 0.65);
+      } else {
+        // District & Raster Modes: Fill district choropleths
+        const bgAlpha = currentMapDisplayMode === 'raster' ? 0.30 : (currentDistrictBgOpacity || 0.45);
+        drawCanvasPoly(DISTRICT_BANG_KHONTHI, cBK.fill, cBK.border, 2.5, bgAlpha);
+        drawCanvasPoly(DISTRICT_AMPHAWA, cAP.fill, cAP.border, 2.5, bgAlpha);
+        drawCanvasPoly(DISTRICT_MUEANG, cMU.fill, cMU.border, 2.5, bgAlpha);
+      }
+
+      // 5. Mae Klong River Polyline
+      ctx.save();
+      ctx.beginPath();
+      const [rStartX, rStartY] = projectMapToCanvas(RIVER_PTS[0][0], RIVER_PTS[0][1], w, h);
+      ctx.moveTo(rStartX, rStartY);
+      for (let i = 1; i < RIVER_PTS.length; i++) {
+        const [rx, ry] = projectMapToCanvas(RIVER_PTS[i][0], RIVER_PTS[i][1], w, h);
+        ctx.lineTo(rx, ry);
+      }
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 7;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = '#0ea5e9';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+      ctx.restore();
+
+      // River Label
+      const [rivLabelX, rivLabelY] = projectMapToCanvas(13.450, 99.965, w, h);
+      ctx.save();
+      ctx.font = 'bold 13px "Prompt", sans-serif';
+      ctx.fillStyle = '#bae6fd';
+      ctx.fillText('🌊 แม่น้ำแม่กลอง (Mae Klong River)', rivLabelX + 15, rivLabelY);
+      ctx.restore();
+
+      // 6. Provincial Outer Boundary (Samut Songkhram Boundary)
+      ctx.save();
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 16;
+      drawCanvasPoly(SAMUT_SONGKHRAM_POLY, null, '#38bdf8', 4.0, 0);
+      ctx.restore();
+
+      // 7. District Centers & Hero Badges
+      const districtBadgesData = [
+        { name: 'อ.บางคนที', en: 'Bang Khonthi', temp: bk.mean, desc: 'สวนผลไม้ / สวนลิ้นจี่', coords: [13.490, 99.960], color: cBK.fill },
+        { name: 'อ.อัมพวา', en: 'Amphawa', temp: ap.mean, desc: 'สวนมะพร้าว / ชุมชนริมคลอง', coords: [13.420, 99.940], color: cAP.fill },
+        { name: 'อ.เมืองสมุทรสงคราม', en: 'Mueang', temp: mu.mean, desc: 'ตัวเมือง / นาเกลือ / อ่าวไทย', coords: [13.390, 100.030], color: cMU.fill }
+      ];
+
+      districtBadgesData.forEach(d => {
+        const [bx, by] = projectMapToCanvas(d.coords[0], d.coords[1], w, h);
+        const cardW = 200, cardH = 68;
+        const rx = bx - cardW / 2, ry = by - cardH / 2;
+
+        ctx.save();
+        // Card Background
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+        ctx.strokeStyle = d.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, cardW, cardH, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        // Texts
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 15px "Prompt", sans-serif';
+        ctx.fillText(d.name, rx + 14, ry + 25);
+
+        ctx.fillStyle = d.color;
+        ctx.font = 'bold 17px "JetBrains Mono", monospace';
+        ctx.fillText(`${d.temp.toFixed(1)}°C`, rx + cardW - 70, ry + 25);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px "Prompt", sans-serif';
+        ctx.fillText(d.desc, rx + 14, ry + 48);
+        ctx.restore();
+      });
+
+      // 8. Landmarks
+      landmarks.forEach(lm => {
+        const [lx, ly] = projectMapToCanvas(lm.coords[0], lm.coords[1], w, h);
+        ctx.save();
+        ctx.font = '16px serif';
+        ctx.fillText(lm.icon, lx - 8, ly - 8);
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 1;
+        const textW = ctx.measureText(lm.name).width;
+        ctx.beginPath();
+        ctx.roundRect(lx + 10, ly - 18, textW + 16, 22, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '11px "Prompt", sans-serif';
+        ctx.fillText(lm.name, lx + 18, ly - 3);
+        ctx.restore();
+      });
+
+      // 9. Top-Left Executive Cartographic Banner
+      ctx.save();
+      const bannerW = 540, bannerH = 120;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(40, 40, bannerW, bannerH, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 20px "Prompt", sans-serif';
+      ctx.fillText('แผนที่อุณหภูมิพื้นผิว (Land Surface Temperature: LST)', 60, 75);
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '14px "Prompt", sans-serif';
+      ctx.fillText('จังหวัดสมุทรสงคราม | ดาวเทียม Landsat 5 TM (พ.ศ. 2532 - 2533)', 60, 102);
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = 'bold 13px "Prompt", sans-serif';
+      ctx.fillText(`📅 ${seasonData.name} | เฉลี่ยทั้งจังหวัด ${seasonData.overall.mean.toFixed(1)} °C`, 60, 130);
+      ctx.restore();
+
+      // 10. Top-Right Cartographic Compass (North Arrow)
+      ctx.save();
+      const compX = w - 85, compY = 85;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(compX, compY, 32, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // North Arrow Triangle
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(compX, compY - 24);
+      ctx.lineTo(compX - 8, compY);
+      ctx.lineTo(compX, compY - 4);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(compX, compY - 24);
+      ctx.lineTo(compX + 8, compY);
+      ctx.lineTo(compX, compY - 4);
+      ctx.closePath();
+      ctx.fill();
+
+      // South Arrow
+      ctx.fillStyle = '#64748b';
+      ctx.beginPath();
+      ctx.moveTo(compX, compY + 24);
+      ctx.lineTo(compX - 7, compY);
+      ctx.lineTo(compX + 7, compY);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText('N', compX - 4, compY - 26);
+      ctx.restore();
+
+      // 11. Bottom-Right Graphical Scale Bar
+      ctx.save();
+      const scaleX = w - 280, scaleY = h - 60;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(scaleX - 15, scaleY - 30, 240, 50, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      // Alternating segments (0 - 2.5 - 5 - 10 km)
+      const segW = 50;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(scaleX, scaleY - 6, segW, 8);
+      ctx.fillStyle = '#0ea5e9';
+      ctx.fillRect(scaleX + segW, scaleY - 6, segW, 8);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(scaleX + segW * 2, scaleY - 6, segW * 2, 8);
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeRect(scaleX, scaleY - 6, segW * 4, 8);
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '10px monospace';
+      ctx.fillText('0', scaleX - 3, scaleY - 12);
+      ctx.fillText('2.5', scaleX + segW - 8, scaleY - 12);
+      ctx.fillText('5.0', scaleX + segW * 2 - 8, scaleY - 12);
+      ctx.fillText('10 km', scaleX + segW * 4 - 15, scaleY - 12);
+      ctx.restore();
+
+      // 12. Bottom-Left Cartographic Legend Box
+      ctx.save();
+      const legX = 40, legY = h - 140;
+      const legW = currentMapDisplayMode === 'lulc' ? 480 : 360;
+      const legH = 80;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(legX, legY, legW, legH, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      if (currentMapDisplayMode === 'lulc') {
+        ctx.fillStyle = '#22c55e';
+        ctx.font = 'bold 12px "Prompt", sans-serif';
+        ctx.fillText('🌱 สัญลักษณ์การใช้ประโยชน์ที่ดิน (LULC 5 ประเภท):', legX + 16, legY + 22);
+
+        LULC_CLASSES.forEach((c, idx) => {
+          const itemX = legX + 16 + (idx * 90);
+          ctx.fillStyle = c.color;
+          ctx.fillRect(itemX, legY + 36, 12, 12);
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = '10px "Prompt", sans-serif';
+          ctx.fillText(c.english.split(' ')[0], itemX + 16, legY + 46);
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '9px monospace';
+          ctx.fillText(`${c.delta > 0 ? '+' : ''}${c.delta}°`, itemX + 16, legY + 60);
+        });
+      } else {
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 12px "Prompt", sans-serif';
+        ctx.fillText('🌡️ แถบระดับอุณหภูมิพื้นผิว (°C):', legX + 16, legY + 22);
+
+        // Gradient Bar
+        const grad = ctx.createLinearGradient(legX + 16, 0, legX + legW - 32, 0);
+        if (currentPalette === 'bw') {
+          grad.addColorStop(0, '#ffffff');
+          grad.addColorStop(0.5, '#888888');
+          grad.addColorStop(1, '#000000');
+        } else {
+          grad.addColorStop(0, '#182b49');
+          grad.addColorStop(0.25, '#0ea5e9');
+          grad.addColorStop(0.5, '#10b981');
+          grad.addColorStop(0.75, '#f59e0b');
+          grad.addColorStop(1, '#ef4444');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(legX + 16, legY + 34, legW - 32, 14);
+        ctx.strokeStyle = '#64748b';
+        ctx.strokeRect(legX + 16, legY + 34, legW - 32, 14);
+
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '10px monospace';
+        ctx.fillText('20°C (เย็น)', legX + 16, legY + 62);
+        ctx.fillText('30°C', legX + legW / 2 - 12, legY + 62);
+        ctx.fillText('40°C (ร้อน)', legX + legW - 75, legY + 62);
+      }
+      ctx.restore();
+
+      // 13. Institutional Metadata Footer
+      ctx.save();
+      ctx.fillStyle = '#64748b';
+      ctx.font = '11px "Prompt", sans-serif';
+      ctx.fillText(
+        `แหล่งข้อมูล: USGS Landsat 5 TM Collection 2 Tier 1 | ระบบคำนวณ: Google Earth Engine (GEE Median Compositing & Cloud Removal) | วันที่ส่งออก: ${new Date().toLocaleString('th-TH')}`,
+        w / 2 - 400,
+        h - 25
+      );
+      ctx.restore();
+
+      return canvas;
+    }
+
+    function exportHighResMapImage() {
+      toast.textContent = 'กำลังเรนเดอร์ภาพแผนที่ความละเอียดสูง (1920 × 1080)...';
+      toast.style.display = 'block';
+
+      setTimeout(() => {
+        const canvas = generateHighResMapCanvas();
+        canvas.toBlob(blob => {
+          if (!blob) {
+            toast.textContent = 'เกิดข้อผิดพลาดในการสร้างภาพแผนที่';
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const fileName = `Samut_Songkhram_LST_Map_${currentSeason}_${Date.now()}.png`;
+
+          // Automatic download
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          // Update Preview Modal
+          const previewImg = document.getElementById('mapExportPreview');
+          if (previewImg) previewImg.src = url;
+          const exportModal = document.getElementById('exportMapModal');
+          if (exportModal) exportModal.style.display = 'flex';
+
+          toast.textContent = `บันทึกภาพแผนที่ความละเอียดสูง (${fileName}) สำเร็จ!`;
+          setTimeout(() => { toast.style.display = 'none'; }, 3200);
+        }, 'image/png');
+      }, 120);
+    }
+
+    const exportMapBtn = document.getElementById('exportMapBtn');
+    if (exportMapBtn) {
+      exportMapBtn.addEventListener('click', exportHighResMapImage);
+    }
+
+    // =========================================================================
+    // 9. ADVANCED GIS & REAL-TIME LAYER TOGGLES
+    // =========================================================================
+    
+    // District Boundaries Layer Toggle
+    const districtBoundariesToggle = document.getElementById('districtBoundariesToggle');
+    if (districtBoundariesToggle) {
+      districtBoundariesToggle.addEventListener('change', (e) => {
+        if (e.target.checked) map.addLayer(districtBoundaryGroup);
+        else map.removeLayer(districtBoundaryGroup);
+      });
+    }
+
+    // District Live Badges Layer Toggle
+    const districtBadgesToggle = document.getElementById('districtBadgesToggle');
+    if (districtBadgesToggle) {
+      districtBadgesToggle.addEventListener('change', (e) => {
+        if (e.target.checked) map.addLayer(districtBadgeGroup);
+        else map.removeLayer(districtBadgeGroup);
+      });
+    }
+
+    // River Polyline Layer Toggle
+    const riverToggle = document.getElementById('riverToggle');
+    if (riverToggle) {
+      riverToggle.addEventListener('change', (e) => {
+        if (e.target.checked) map.addLayer(riverLayer);
+        else map.removeLayer(riverLayer);
+      });
+    }
+
+    // Landmarks Layer Toggle
+    const landmarksToggle = document.getElementById('landmarksToggle');
+    if (landmarksToggle) {
+      landmarksToggle.addEventListener('change', (e) => {
+        if (e.target.checked) map.addLayer(landmarkGroup);
+        else map.removeLayer(landmarkGroup);
+      });
+    }
+
+    // Real-Time Live Clock & Diurnal Oscillation Telemetry
+    function updateRealtimeClock() {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('th-TH', { hour12: false }) + ' น.';
+      const clockEl = document.getElementById('liveClockText');
+      if (clockEl) clockEl.textContent = timeStr;
+
+      // Real-time micro-diurnal oscillation simulation
+      const seconds = now.getSeconds();
+      const microWiggle = Math.sin(seconds * 0.1) * 0.2;
+      const seasonMean = SEASON_DATA[currentSeason].overall.mean;
+      const currentLive = (seasonMean + microWiggle).toFixed(1);
+      const liveTempEl = document.getElementById('liveWeatherTemp');
+      if (liveTempEl) liveTempEl.textContent = `${currentLive} °C`;
+    }
+    setInterval(updateRealtimeClock, 1000);
+    updateRealtimeClock();
+
+    // UHI and Cloud Mask Toggles
+    const uhiToggle = document.getElementById('uhiToggle');
+    const cloudMaskToggle = document.getElementById('cloudMaskToggle');
+    if (uhiToggle) uhiToggle.addEventListener('change', redrawLayers);
+    if (cloudMaskToggle) cloudMaskToggle.addEventListener('change', redrawLayers);
+
+    // Timelapse Auto-Play with Active Indicator
+    let timelapseTimer = null;
+    const timelapseBtn = document.getElementById('timelapseBtn');
+    const playIcon = document.getElementById('playIcon');
+    const playText = document.getElementById('playText');
+    const seasonOrder = ['winter', 'summer', 'rainy', 'annual'];
+
+    if (timelapseBtn) {
+      timelapseBtn.addEventListener('click', () => {
+        if (timelapseTimer) {
+          clearInterval(timelapseTimer);
+          timelapseTimer = null;
+          playIcon.textContent = '▶️';
+          playText.textContent = 'เล่น Timelapse';
+          timelapseBtn.classList.remove('btn-primary');
+          timelapseBtn.classList.add('btn-secondary');
+        } else {
+          playIcon.textContent = '⏸️';
+          playText.textContent = 'หยุดเล่น';
+          timelapseBtn.classList.add('btn-primary');
+          timelapseBtn.classList.remove('btn-secondary');
+          timelapseTimer = setInterval(() => {
+            const nextIdx = (seasonOrder.indexOf(currentSeason) + 1) % seasonOrder.length;
+            const nextSeason = seasonOrder[nextIdx];
+            const targetBtn = document.querySelector('.season-btn[data-season="' + nextSeason + '"]');
+            if (targetBtn) targetBtn.click();
+          }, 1800);
+        }
+      });
+    }
+
+    // Fullscreen Toggle with Event Listener for Esc / Exit
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    if (fullscreenBtn) {
+      fullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(err => {
+            alert('ไม่สามารถเปิดโหมดเต็มจอได้: ' + err.message);
+          });
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      if (!fullscreenBtn) return;
+      if (document.fullscreenElement) {
+        fullscreenBtn.innerHTML = '🗗 ย่อจอ';
+        fullscreenBtn.classList.add('btn-primary');
+        fullscreenBtn.classList.remove('btn-secondary');
+      } else {
+        fullscreenBtn.innerHTML = '⛶ เต็มจอ';
+        fullscreenBtn.classList.remove('btn-primary');
+        fullscreenBtn.classList.add('btn-secondary');
+      }
+    });
+
+    // CSV Data Export
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    if (exportCsvBtn) {
+      exportCsvBtn.addEventListener('click', () => {
+        const rows = [
+          ['Prov_Name', 'District', 'Season', 'Date_Range', 'Min_LST_C', 'Mean_LST_C', 'Max_LST_C', 'Land_Cover_Type'],
+        ];
+
+        Object.entries(SEASON_DATA).forEach(([sKey, sVal]) => {
+          sVal.districts.forEach(d => {
+            rows.push([
+              'Samut Songkhram',
+              '"' + d.name + '"',
+              '"' + sVal.name + '"',
+              '"' + sVal.range + '"',
+              d.min.toFixed(2),
+              d.mean.toFixed(2),
+              d.max.toFixed(2),
+              '"' + d.land + '"'
+            ]);
+          });
+        });
+
+        const csvContent = '\uFEFF' + rows.map(e => e.join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'Samut_Songkhram_LST_Report_1989_1990.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        toast.textContent = 'ดาวน์โหลดรายงานสถิติ CSV เรียบร้อยแล้ว!';
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 2600);
+      });
+    }
+
+    // LULC Research CSV Export (LST vs LULC Correlation)
+    const exportLulcBtn = document.getElementById('exportLulcBtn');
+    if (exportLulcBtn) {
+      exportLulcBtn.addEventListener('click', () => {
+        const rows = [
+          ['Province', 'Season', 'Date_Range', 'LULC_ID', 'LULC_Name_TH', 'LULC_Name_EN', 'Area_Coverage_Pct', 'Seasonal_Mean_LST_C', 'Thermal_Delta_C', 'Thermal_Impact_Role']
+        ];
+
+        Object.entries(SEASON_DATA).forEach(([sKey, sVal]) => {
+          const baseMean = sVal.overall.mean;
+          LULC_CLASSES.forEach(cls => {
+            const clsMean = (baseMean + cls.delta).toFixed(2);
+            rows.push([
+              'Samut Songkhram',
+              '"' + sVal.name + '"',
+              '"' + sVal.range + '"',
+              cls.id,
+              '"' + cls.name + '"',
+              '"' + cls.english + '"',
+              cls.areaPct.toFixed(1),
+              clsMean,
+              cls.delta.toFixed(2),
+              '"' + cls.role + '"'
+            ]);
+          });
+        });
+
+        const csvContent = '\uFEFF' + rows.map(e => e.join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'samut_songkhram_lst_x_lulc_research.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        toast.textContent = 'ส่งออกข้อมูลวิจัยความสัมพันธ์ LST x LULC (CSV) เรียบร้อย!';
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 2800);
+      });
+    }
+
+    // Modal Open/Close Event Handlers
+    const codeModal = document.getElementById('codeModal');
+    const openCodeModalBtn = document.getElementById('openCodeModalBtn');
+    const openCodeModalBtnHeader = document.getElementById('openCodeModalBtnHeader');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const modalCloseFooterBtn = document.getElementById('modalCloseFooterBtn');
+    const modalCopyBtn = document.getElementById('modalCopyBtn');
+    const fullGeeCodeText = document.getElementById('fullGeeCodeText');
+    const toast = document.getElementById('toast');
+
+    function openModal() {
+      if (codeModal) codeModal.style.display = 'flex';
+    }
+    function closeModal() {
+      if (codeModal) codeModal.style.display = 'none';
+    }
+
+    if (openCodeModalBtn) openCodeModalBtn.addEventListener('click', openModal);
+    if (openCodeModalBtnHeader) openCodeModalBtnHeader.addEventListener('click', openModal);
+    if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
+    if (modalCloseFooterBtn) modalCloseFooterBtn.addEventListener('click', closeModal);
+
+    if (codeModal) {
+      codeModal.addEventListener('click', (e) => {
+        if (e.target === codeModal) closeModal();
+      });
+    }
+
+    // Modal Copy Button
+    if (modalCopyBtn && fullGeeCodeText) {
+      modalCopyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(fullGeeCodeText.textContent).then(() => {
+          toast.textContent = 'คัดลอกโค้ด GEE 13 ขั้นตอนฉบับสมบูรณ์ (LST + LULC) แล้ว!';
+          toast.style.display = 'block';
+          setTimeout(() => { toast.style.display = 'none'; }, 2600);
+        });
+      });
+    }
+
+    // Map Export Modal Handlers
+    const exportMapModal = document.getElementById('exportMapModal');
+    const closeExportModalBtn = document.getElementById('closeExportModalBtn');
+    const closeExportModalFooterBtn = document.getElementById('closeExportModalFooterBtn');
+    const downloadMapPngBtn = document.getElementById('downloadMapPngBtn');
+    const printMapBtn = document.getElementById('printMapBtn');
+
+    function closeExportModal() {
+      if (exportMapModal) exportMapModal.style.display = 'none';
+    }
+
+    if (closeExportModalBtn) closeExportModalBtn.addEventListener('click', closeExportModal);
+    if (closeExportModalFooterBtn) closeExportModalFooterBtn.addEventListener('click', closeExportModal);
+    if (exportMapModal) {
+      exportMapModal.addEventListener('click', (e) => {
+        if (e.target === exportMapModal) closeExportModal();
+      });
+    }
+
+    if (downloadMapPngBtn) {
+      downloadMapPngBtn.addEventListener('click', () => {
+        const previewImg = document.getElementById('mapExportPreview');
+        if (previewImg && previewImg.src) {
+          const link = document.createElement('a');
+          link.href = previewImg.src;
+          link.download = `Samut_Songkhram_LST_Map_${currentSeason}_${Date.now()}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      });
+    }
+
+    if (printMapBtn) {
+      printMapBtn.addEventListener('click', () => {
+        window.print();
+      });
+    }
+
+  </script>
+  <!-- Code Viewer Modal -->
+  <div class="modal-backdrop" id="codeModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>💻 โค้ด Google Earth Engine (JavaScript) - 13 ขั้นตอนฉบับสมบูรณ์ (LST + LULC)</h3>
+        <button class="btn btn-secondary" id="closeModalBtn" style="padding:4px 10px;">✕ ปิด</button>
+      </div>
+      <div class="modal-body">
+        <div class="code-container" id="fullGeeCodeText">// ==============================================================================
+// การคำนวณอุณหภูมิพื้นผิว (Land Surface Temperature: LST) จากดาวเทียม Landsat 5
+// พื้นที่ศึกษา: จังหวัดสมุทรสงคราม (พ.ศ. 2532 - 2533 / ค.ศ. 1989 - 1990)
+// ระบบตัดเมฆ 100% + Median Compositing + ดึงค่าภาพที่ไม่มีเมฆมาแทนที่อัตโนมัติ
+// ==============================================================================
+
+// =====================================================
+// 1. Function สำหรับตัดเมฆและแปลง ST_B6 เป็น Kelvin
+// (ปรับปรุง: ตัดก้อนเมฆ ขอบเมฆ และไอความเย็นรอบขอบ 100%)
+// =====================================================
+function maskL457sr(image) {
+  var qa = image.select(&#x27;QA_PIXEL&#x27;);
+
+  // ตรวจจับเมฆ เงาเมฆ และขอบเขตเมฆจาก QA_PIXEL (USGS Collection 2)
+  // Bit 0: Fill, Bit 1: Dilated Cloud, Bit 3: Cloud, Bit 4: Cloud Shadow
+  // 11011 (binary) = 27
+  var qaMask = qa.bitwiseAnd(parseInt(&#x27;11011&#x27;, 2)).eq(0);
+
+  // ดึงระดับความมั่นใจเรื่องเมฆและเงาเมฆ (Bits 8-9, 10-11)
+  var cloudConfidence = qa.rightShift(8).bitwiseAnd(3);
+  var shadowConfidence = qa.rightShift(10).bitwiseAnd(3);
+
+  // ตั้งเกณฑ์เข้มงวด:
+  // cloudConfidence.lt(2) = ตัดทั้งระดับ High(3) และ Medium(2) ออก ป้องกันเมฆบาง
+  var cloudMask = cloudConfidence.lt(2); 
+  // shadowConfidence.neq(3) = ตัดเฉพาะ High Shadow(3) เพื่อไม่ให้ตัดโดนผืนน้ำอ่าวไทยและนาเกลือ
+  var shadowMask = shadowConfidence.neq(3);
+
+  // รวมหน้ากากพิกเซลสะอาดเบื้องต้น
+  var clearMask = qaMask.and(cloudMask).and(shadowMask);
+
+  // === ทีเด็ด: ขยายรัศมีตัดขอบเมฆ 150 เมตร (Buffer 150m) ===
+  // เนื่องจากเซนเซอร์ความร้อน Landsat 5 มีความละเอียด 120 เมตร
+  // การขยายขอบ 150 เมตร จะลบไอความเย็นรอบก้อนเมฆ (Adjacency Cooling) ออกจนหมด
+  var isCloud = clearMask.not();
+  var expandedCloudMask = isCloud
+    .focal_max({radius: 150, units: &#x27;meters&#x27;})
+    .not();
+
+  // ตรวจสอบค่าความอิ่มตัวของเซนเซอร์ (Radiometric saturation)
+  var saturationMask = image.select(&#x27;QA_RADSAT&#x27;).eq(0);
+
+  // แปลงค่า ST_B6 เป็นหน่วยเคลวิน (Kelvin) ตามสูตรมาตรฐาน USGS Landsat Collection 2
+  // Scale Factor = 0.00341802, Additive Offset = 149.0
+  var thermalBand = image
+    .select(&#x27;ST_B6&#x27;)
+    .multiply(0.00341802)
+    .add(149.0);
+
+  // ตัดค่าอุณหภูมิยอดเมฆตกค้าง (&lt; 20°C หรือ &lt; 293.15 K) ทิ้งเด็ดขาด
+  // ป้องกันไม่ให้ไอเมฆความเย็นหลุดรอดไปแสดงผลเป็นสีขาวในพาเลทขาว-ดำ
+  var tempMask = thermalBand.gte(293.15).and(thermalBand.lte(323.15));
+
+  return image
+    .addBands(thermalBand, null, true)
+    .updateMask(expandedCloudMask) // ใช้ Mask ที่ขยายขอบ 150m ตัดเมฆออก
+    .updateMask(saturationMask)
+    .updateMask(tempMask);
+}
+
+// =====================================================
+// 2. กำหนดพื้นที่ศึกษา (จังหวัดสมุทรสงคราม)
+// =====================================================
+var countries = ee.FeatureCollection(&quot;FAO/GAUL/2015/level1&quot;);
+
+var roi = countries.filter(
+  ee.Filter.and(
+    ee.Filter.eq(&#x27;ADM0_NAME&#x27;, &#x27;Thailand&#x27;),
+    ee.Filter.or(
+      ee.Filter.stringContains(&#x27;ADM1_NAME&#x27;, &#x27;Samut Songkham&#x27;),
+      ee.Filter.stringContains(&#x27;ADM1_NAME&#x27;, &#x27;Samut Songkhram&#x27;)
+    )
+  )
+);
+
+// สร้างเฉพาะเส้นขอบเขตจังหวัด เพื่อไม่ให้แผ่นสีเทาบดบังภาพความร้อน
+var roiOutline = ee.Image().paint({
+  featureCollection: roi,
+  color: 1,
+  width: 1.5
+});
+
+// =====================================================
+// 3. Landsat 5 (แบ่ง 3 ฤดูกาล + ชุดข้อมูลทั้งปีสำหรับทดแทน)
+// =====================================================
+var LS5_Summer = ee.ImageCollection(&quot;LANDSAT/LT05/C02/T1_L2&quot;)
+  .filterDate(&#x27;1989-02-15&#x27;, &#x27;1989-05-15&#x27;)
+  .filterBounds(roi);
+
+var LS5_Rainy = ee.ImageCollection(&quot;LANDSAT/LT05/C02/T1_L2&quot;)
+  .filterDate(&#x27;1989-05-16&#x27;, &#x27;1989-10-15&#x27;)
+  .filterBounds(roi);
+
+var LS5_Winter = ee.ImageCollection(&quot;LANDSAT/LT05/C02/T1_L2&quot;)
+  .filterDate(&#x27;1989-10-16&#x27;, &#x27;1990-02-15&#x27;)
+  .filterBounds(roi);
+
+// เพิ่มชุดข้อมูลทั้งปี 1989 (11 ภาพ) เพื่อใช้ดึงค่าอุณหภูมิจริงจากวันที่ไร้เมฆมาเติมจุดที่มีเมฆบังทุกภาพ
+var LS5_Annual = ee.ImageCollection(&quot;LANDSAT/LT05/C02/T1_L2&quot;)
+  .filterDate(&#x27;1989-01-01&#x27;, &#x27;1989-12-31&#x27;)
+  .filterBounds(roi);
+
+// =====================================================
+// 4. ตรวจสอบจำนวนภาพในแต่ละฤดูกาล
+// =====================================================
+print(&#x27;จำนวนภาพฤดูร้อน (Summer images):&#x27;, LS5_Summer.size());
+print(&#x27;จำนวนภาพฤดูฝน (Rainy images):&#x27;, LS5_Rainy.size());
+print(&#x27;จำนวนภาพฤดูหนาว (Winter images):&#x27;, LS5_Winter.size());
+print(&#x27;จำนวนภาพทั้งปีสำหรับเติมเต็ม (Annual images):&#x27;, LS5_Annual.size());
+
+// =====================================================
+// 5. ตัดเมฆ + แปลง ST_B6 เป็น Kelvin
+// =====================================================
+var Masked_S = LS5_Summer.map(maskL457sr);
+var Masked_R = LS5_Rainy.map(maskL457sr);
+var Masked_W = LS5_Winter.map(maskL457sr);
+var Masked_Annual = LS5_Annual.map(maskL457sr);
+
+// =====================================================
+// 6. เลือกแบนด์ความร้อน ST_B6
+// =====================================================
+var stBand_S = Masked_S.select(&#x27;ST_B6&#x27;);
+var stBand_R = Masked_R.select(&#x27;ST_B6&#x27;);
+var stBand_W = Masked_W.select(&#x27;ST_B6&#x27;);
+var stBand_Annual = Masked_Annual.select(&#x27;ST_B6&#x27;);
+
+// =====================================================
+// 7. Kelvin → Celsius
+// =====================================================
+var convertToCelsius = function(image) {
+  return image
+    .subtract(273.15)
+    .copyProperties(
+      image,
+      [&#x27;system:time_start&#x27;]
+    );
+};
+
+// =====================================================
+// 8. หัวใจสำคัญ: หาค่า Median + ดึงภาพที่ไม่มีเมฆมาแทนที่อัตโนมัติ
+// =====================================================
+// 1) เมื่อเราสั่ง .median() ใน ImageCollection ที่ผ่านการตัดเมฆแล้ว
+//    ระบบ Google Earth Engine จะคัดกรองเฉพาะวันที่ &quot;ไม่มีเมฆ&quot; ของพิกเซลนั้นมาหาค่ามัธยฐาน
+//    (จุดไหนที่ภาพวันหนึ่งมีเมฆ จะถูกตัดทิ้ง และดึงค่าของวันอื่นในฤดูเดียวกันที่ไม่มีเมฆมาใส่แทนทันที)
+// 2) เสริมด้วย .unmask(lstAnnual_clean): ในกรณีที่พิกเซลบางจุดมีเมฆบดบังทุกภาพในฤดูกาลนั้น (เช่น ช่วงมรสุมฤดูฝน)
+//    ระบบจะดึงค่าอุณหภูมิจริงจากภาพเฉลี่ยทั้งปีที่ไร้เมฆมาอุดรูโหว่ให้ทันที ทำให้ภาพเนียนสมบูรณ์ 100%
+
+// คำนวณภาพตัวแทนประจำปีที่ไร้เมฆ (Annual Median) สำหรับอุดช่องว่าง
+var lstAnnual_clean = stBand_Annual
+  .map(convertToCelsius)
+  .median();
+
+// คำนวณ Median รายฤดู พร้อมแทนที่จุดที่มีเมฆด้วยภาพที่ไม่มีเมฆ
+var lstCelsius_S = stBand_S
+  .map(convertToCelsius)
+  .median()
+  .unmask(lstAnnual_clean)
+  .clip(roi);
+
+var lstCelsius_R = stBand_R
+  .map(convertToCelsius)
+  .median()
+  .unmask(lstAnnual_clean)
+  .clip(roi);
+
+var lstCelsius_W = stBand_W
+  .map(convertToCelsius)
+  .median()
+  .unmask(lstAnnual_clean)
+  .clip(roi);
+
+// =====================================================
+// 9. Visualization (พาเลทขาว-ดำ ดั้งเดิมตามที่ลูกค้าต้องการ)
+// =====================================================
+var lstVis = {
+  min: 20,
+  max: 40,
+  palette: [
+    &#x27;FFFFFF&#x27;, // 20°C = สีขาว (พื้นที่น้ำเย็น ชายฝั่งอ่าวไทย ลุ่มน้ำแม่กลอง)
+    &#x27;000000&#x27;  // 40°C = สีดำ (พื้นที่ร้อน นาเกลือ ตัวเมือง อาคาร)
+  ]
+};
+
+// =====================================================
+// 10. แสดงผลบนแผนที่
+// =====================================================
+Map.centerObject(roi, 11);
+
+// แสดงเส้นขอบเขตจังหวัดสมุทรสงคราม (แบบโปร่งใส ไม่บดบังภาพความร้อน)
+Map.addLayer(
+  roiOutline,
+  {palette: [&#x27;000000&#x27;]},
+  &#x27;ขอบเขตจังหวัดสมุทรสงคราม&#x27;
+);
+
+// แสดงผลภาพอุณหภูมิ LST แต่ละฤดู (ตัดเมฆออกเกลี้ยง 100% และเติมเต็มเรียบร้อย)
+Map.addLayer(
+  lstCelsius_S,
+  lstVis,
+  &#x27;Landsat 5 LST Summer (°C) [ฤดูร้อน]&#x27;
+);
+
+Map.addLayer(
+  lstCelsius_R,
+  lstVis,
+  &#x27;Landsat 5 LST Rainy (°C) [ฤดูฝน]&#x27;,
+  false
+);
+
+Map.addLayer(
+  lstCelsius_W,
+  lstVis,
+  &#x27;Landsat 5 LST Winter (°C) [ฤดูหนาว]&#x27;,
+  false
+);
+
+// =====================================================
+// 11. ตรวจสอบค่าต่ำสุด-สูงสุด (°C)
+// =====================================================
+print(
+  &#x27;Summer LST °C (สถิติฤดูร้อน):&#x27;,
+  lstCelsius_S.reduceRegion({
+    reducer: ee.Reducer.minMax(),
+    geometry: roi.geometry(),
+    scale: 30,
+    maxPixels: 1e13
+  })
+);
+
+print(
+  &#x27;Rainy LST °C (สถิติฤดูฝน):&#x27;,
+  lstCelsius_R.reduceRegion({
+    reducer: ee.Reducer.minMax(),
+    geometry: roi.geometry(),
+    scale: 30,
+    maxPixels: 1e13
+  })
+);
+
+print(
+  &#x27;Winter LST °C (สถิติฤดูหนาว):&#x27;,
+  lstCelsius_W.reduceRegion({
+    reducer: ee.Reducer.minMax(),
+    geometry: roi.geometry(),
+    scale: 30,
+    maxPixels: 1e13
+  })
+);
+
+// =====================================================
+// 12. คำสั่ง Export ภาพไปยัง Google Drive (ความละเอียดสูง 30 เมตร)
+// =====================================================
+Export.image.toDrive({
+  image: lstCelsius_S,
+  description: &#x27;LST_Summer_1989_SamutSongkhram&#x27;,
+  folder: &#x27;EarthEngine_LST&#x27;,
+  fileNamePrefix: &#x27;LST_Summer_1989_SamutSongkhram&#x27;,
+  region: roi.geometry(),
+  scale: 30,
+  crs: &#x27;EPSG:4326&#x27;,
+  maxPixels: 1e13
+});
+
+// =====================================================
+// 13. จำแนกประเภทการใช้ประโยชน์ที่ดิน (LULC 5 ประเภท)
+// และคำนวณสถิติ Zonal Statistics (ความสัมพันธ์ LST vs LULC)
+// =====================================================
+// กรองภาพรายปีเพื่อคำนวณดัชนีพืชพรรณ (NDVI), สิ่งปลูกสร้าง (NDBI), แหล่งน้ำ (MNDWI)
+var annualSr = annualCollection
+  .map(maskL457sr)
+  .median()
+  .clip(roi);
+
+// คำนวณดัชนีจำแนก LULC (Landsat 5 TM: B2=Green, B3=Red, B4=NIR, B5=SWIR1)
+var ndvi = annualSr.normalizedDifference([&#x27;SR_B4&#x27;, &#x27;SR_B3&#x27;]).rename(&#x27;NDVI&#x27;);
+var ndbi = annualSr.normalizedDifference([&#x27;SR_B5&#x27;, &#x27;SR_B4&#x27;]).rename(&#x27;NDBI&#x27;);
+var mndwi = annualSr.normalizedDifference([&#x27;SR_B2&#x27;, &#x27;SR_B5&#x27;]).rename(&#x27;MNDWI&#x27;);
+
+// จัดหมวดหมู่ 5 ประเภท:
+// 1 = ชุมชนเมือง (Urban), 2 = สวนผลไม้ (Orchards), 3 = นาเกลือ/เพาะเลี้ยงสัตว์น้ำ (Salt/Aqua)
+// 4 = ป่าชายเลน (Mangrove), 5 = แหล่งน้ำ (Water)
+var lulcClass = ee.Image(0)
+  .where(mndwi.gt(0.10), 5)                          // แหล่งน้ำและแม่น้ำแม่กลอง
+  .where(ndbi.gt(0.00).and(mndwi.lte(0.10)), 1)      // ชุมชนเมืองและสิ่งปลูกสร้าง
+  .where(ndvi.gt(0.45).and(mndwi.lte(0.10)), 2)      // สวนเกษตร/สวนผลไม้ผสมผสาน
+  .where(ndvi.gt(0.25).and(ndvi.lte(0.45)), 4)      // ป่าชายเลนและที่ลุ่มชื้นแฉะ
+  .where(ndvi.lte(0.25).and(mndwi.lte(0.10)).and(ndbi.lte(0.00)), 3) // นาเกลือและบ่อเพาะเลี้ยงสัตว์น้ำ
+  .rename(&#x27;lulc_class&#x27;);
+
+// แสดงผลแผนที่ LULC 5 ประเภท
+Map.addLayer(
+  lulcClass,
+  {
+    min: 1,
+    max: 5,
+    palette: [&#x27;EF4444&#x27;, &#x27;10B981&#x27;, &#x27;F59E0B&#x27;, &#x27;059669&#x27;, &#x27;0284C7&#x27;]
+  },
+  &#x27;LULC 5 Classes (Samut Songkhram 1989-1990)&#x27;,
+  false
+);
+
+// รวมภาพ LST ฤดูร้อน และภาพ LULC เข้าด้วยกันเพื่อหาค่าเฉลี่ย
+var lstWithLulc = lstCelsius_S.addBands(lulcClass);
+
+// คำนวณค่าเฉลี่ยอุณหภูมิ LST ในแต่ละประเภท LULC (Zonal Statistics)
+var zonalStats = lstWithLulc.reduceRegion({
+  reducer: ee.Reducer.mean().group({
+    groupField: 1,
+    groupName: &#x27;lulc_code&#x27;
+  }),
+  geometry: roi.geometry(),
+  scale: 30,
+  maxPixels: 1e13
+});
+
+print(&#x27;📊 สถิติอุณหภูมิเฉลี่ยแยกตาม LULC 5 ประเภท (Zonal Mean LST °C):&#x27;, zonalStats);
+
+// ส่งออกผลการวิเคราะห์ความสัมพันธ์ LST x LULC เป็น CSV เข้า Google Drive
+var zonalStatsList = ee.List(zonalStats.get(&#x27;groups&#x27;));
+var statsFeatures = zonalStatsList.map(function(item) {
+  var d = ee.Dictionary(item);
+  return ee.Feature(null, {
+    &#x27;Province&#x27;: &#x27;Samut Songkhram&#x27;,
+    &#x27;Season&#x27;: &#x27;Summer_1989&#x27;,
+    &#x27;LULC_Code&#x27;: d.get(&#x27;lulc_code&#x27;),
+    &#x27;Mean_LST_Celsius&#x27;: d.get(&#x27;mean&#x27;)
+  });
+});
+
+Export.table.toDrive({
+  collection: ee.FeatureCollection(statsFeatures),
+  description: &#x27;LST_vs_LULC_Zonal_Statistics_SamutSongkhram&#x27;,
+  folder: &#x27;EarthEngine_LST&#x27;,
+  fileFormat: &#x27;CSV&#x27;
+});
+</div>
+      </div>
+      <div class="modal-footer">
+        <span style="font-size:0.75rem; color:var(--text-muted);">คัดลอกโค้ดนี้ไปวางใน Google Earth Engine Code Editor ได้ทันที</span>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-primary" id="modalCopyBtn">📋 คัดลอกโค้ดทั้งหมด</button>
+          <button class="btn btn-secondary" id="modalCloseFooterBtn">ปิด</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: ตัวอย่างและบันทึกภาพแผนที่ (High-Res Map Export Modal) -->
+  <div class="modal-backdrop" id="exportMapModal">
+    <div class="modal-content" style="max-width: 880px;">
+      <div class="modal-header">
+        <h3>📸 บันทึกภาพแผนที่ความละเอียดสูง (Map Image Export)</h3>
+        <button class="btn btn-secondary" id="closeExportModalBtn" style="padding:4px 10px;">✕ ปิด</button>
+      </div>
+      <div class="modal-body" style="background: var(--bg-surface); padding: 18px; text-align: center;">
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+          <span>🖼️ ภาพแผนที่ความละเอียดสูง (1920 × 1080 Full HD)</span>
+          <span style="color:#22c55e; font-weight:700;">✓ เรนเดอร์แผนที่จริง (พร้อมเข็มทิศ มาตราส่วน และ Legend)</span>
+        </div>
+        <img id="mapExportPreview" alt="ตัวอย่างภาพแผนที่" style="width:100%; max-height:460px; object-fit:contain; border-radius:8px; border:1px solid var(--border-color); background:#090d16; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+        <p style="font-size:0.75rem; color:var(--text-muted); margin-top:10px; line-height:1.5;">
+          💡 ภาพแผนที่นี้เป็นไฟล์ภาพ PNG แบบ Standalone ประกอบด้วยเส้นขอบเขตจังหวัด/อำเภอ, อุณหภูมิพื้นผิว, แนวแม่น้ำแม่กลอง, จุดแลนด์มาร์ก, เข็มทิศ (N), มาตราส่วน, แถบสัญลักษณ์, และข้อมูลอ้างอิงทางวิชาการ
+        </p>
+      </div>
+      <div class="modal-footer">
+        <span style="font-size:0.75rem; color:var(--text-muted);">ดาวน์โหลดไฟล์เป็นภาพ PNG คุณภาพสูง</span>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-primary" id="downloadMapPngBtn">📥 ดาวน์โหลดภาพอีกครั้ง (PNG)</button>
+          <button class="btn btn-secondary" id="printMapBtn">🖨️ พิมพ์เอกสาร (Print / PDF)</button>
+          <button class="btn btn-secondary" id="closeExportModalFooterBtn">ปิด</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

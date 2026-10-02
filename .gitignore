@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Scratch & Dev Caches
+scratch_chrome/
+*.log
+*.tmp
+*.zip
